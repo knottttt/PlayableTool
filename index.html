@@ -2,171 +2,639 @@
 <html lang="zh-CN">
 <head>
   <meta charset="UTF-8" />
-  <title>Playable 换图 + 跳转工具（离线版）</title>
+  <title>PlayableTool UA - H5 素材替换工具</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+
   <style>
-    body {
-      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
-      margin: 0;
-      padding: 20px;
-      background: #111;
-      color: #eee;
+    :root {
+      --bg: #f7f6f3;
+      --sidebar-bg: #f4f3ef;
+      --card-bg: #ffffff;
+      --border-subtle: #e3e2dd;
+      --border-strong: #d2d0c8;
+      --text-main: #262626;
+      --text-muted: #7a7a7a;
+      --accent: #2563eb;
+      --accent-soft: #e3edff;
+      --radius-lg: 12px;
+      --radius-md: 8px;
+      --radius-sm: 6px;
     }
-    h1 {
-      font-size: 20px;
-      margin-bottom: 10px;
-    }
-    .section {
-      border: 1px solid #333;
-      border-radius: 8px;
-      padding: 15px;
-      margin-bottom: 15px;
-      background: #181818;
-    }
-    .section h2 {
-      font-size: 16px;
-      margin-top: 0;
-    }
-    label {
-      display: inline-block;
-      margin: 6px 0;
-    }
-    input[type="text"] {
-      width: 100%;
+
+    * {
       box-sizing: border-box;
-      padding: 6px 8px;
-      border-radius: 4px;
-      border: 1px solid #444;
-      background: #222;
-      color: #eee;
     }
-    input[type="file"] {
-      margin: 4px 0;
+
+    html, body {
+      margin: 0;
+      padding: 0;
+      height: 100%;
+      font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI",
+        "PingFang SC", "Microsoft YaHei", sans-serif;
+      color: var(--text-main);
+      background: var(--bg);
     }
-    button {
-      padding: 6px 14px;
-      border-radius: 4px;
-      border: none;
-      cursor: pointer;
-      background: #3b82f6;
-      color: #fff;
-      font-size: 14px;
-      margin-right: 8px;
+
+    body {
+      display: flex;
+      align-items: stretch;
+      justify-content: center;
     }
-    button:disabled {
-      background: #555;
-      cursor: not-allowed;
+
+    .app-root {
+      display: flex;
+      flex: 1;
+      max-width: 1280px;
+      margin: 16px;
+      border-radius: 16px;
+      background: #f9f8f5;
+      box-shadow:
+        0 16px 40px rgba(15, 23, 42, 0.12),
+        0 0 0 1px rgba(148, 163, 184, 0.18);
+      overflow: hidden;
     }
-    .small {
-      font-size: 12px;
-      color: #aaa;
+
+    /* 左侧类似 Notion 的信息栏 */
+    .sidebar {
+      width: 260px;
+      background: linear-gradient(135deg, #f5f3ed, #f0eee9);
+      border-right: 1px solid var(--border-subtle);
+      padding: 18px 18px 16px;
+      display: flex;
+      flex-direction: column;
+      gap: 18px;
     }
-    .image-list {
-      max-height: 400px;
-      overflow-y: auto;
-      border: 1px solid #333;
-      border-radius: 6px;
-      padding: 8px;
-      background: #101010;
-      margin-top: 8px;
-    }
-    .image-item {
+
+    .logo-row {
       display: flex;
       align-items: center;
-      border-bottom: 1px solid #222;
-      padding: 6px 0;
+      gap: 10px;
+      margin-bottom: 4px;
+    }
+
+    .logo-mark {
+      width: 26px;
+      height: 26px;
+      border-radius: 6px;
+      background: radial-gradient(circle at 20% 20%, #2563eb, #7c3aed);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: white;
+      font-size: 14px;
+      font-weight: 600;
+      box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.7),
+        0 6px 18px rgba(37, 99, 235, 0.35);
+    }
+
+    .logo-text-main {
+      font-size: 15px;
+      font-weight: 600;
+      letter-spacing: 0.01em;
+    }
+
+    .logo-text-sub {
+      font-size: 11px;
+      color: var(--text-muted);
+    }
+
+    .sidebar-section {
+      padding: 10px;
+      border-radius: var(--radius-md);
+      background: rgba(255, 255, 255, 0.7);
+      border: 1px solid rgba(226, 232, 240, 0.9);
+    }
+
+    .sidebar-section-title {
+      font-size: 12px;
+      font-weight: 600;
+      color: var(--text-muted);
+      text-transform: uppercase;
+      letter-spacing: 0.12em;
+      margin-bottom: 8px;
+    }
+
+    .sidebar-kv {
+      font-size: 12px;
+      line-height: 1.6;
+      color: var(--text-muted);
+    }
+
+    .sidebar-kv strong {
+      color: #4b5563;
+      font-weight: 600;
+    }
+
+    .badge-inline {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      padding: 0 6px;
+      border-radius: 999px;
+      background: var(--accent-soft);
+      color: var(--accent);
+      font-size: 11px;
+      font-weight: 500;
+      margin-left: 4px;
+    }
+
+    .sidebar-footer {
+      margin-top: auto;
+      font-size: 11px;
+      color: var(--text-muted);
+      border-top: 1px solid rgba(226, 232, 240, 0.8);
+      padding-top: 8px;
+    }
+
+    /* 右侧主区域 - Notion 风卡片布局 */
+    .main-area {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      padding: 18px 20px 16px;
+      gap: 10px;
+    }
+
+    .topbar {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 4px;
+    }
+
+    .topbar-title {
+      font-size: 17px;
+      font-weight: 600;
+      display: flex;
+      align-items: center;
       gap: 8px;
     }
-    .image-item:last-child {
-      border-bottom: none;
-    }
-    .image-item img {
-      width: 80px;
-      height: 80px;
-      object-fit: contain;
-      background: #000;
-      border-radius: 4px;
-      border: 1px solid #333;
-    }
-    .image-info {
-      flex: 1;
-      font-size: 12px;
-      word-break: break-all;
-    }
-    .tag {
-      display: inline-block;
-      padding: 2px 6px;
-      border-radius: 3px;
+
+    .topbar-title span {
+      display: inline-flex;
+      padding: 0 8px;
+      border-radius: 999px;
+      border: 1px solid rgba(148, 163, 184, 0.5);
       font-size: 11px;
+      color: var(--text-muted);
+      font-weight: 500;
+    }
+
+    .topbar-status {
+      font-size: 12px;
+      color: var(--text-muted);
+    }
+
+    .pill {
+      border-radius: 999px;
+      padding: 2px 8px;
+      border: 1px solid rgba(148, 163, 184, 0.5);
+      font-size: 11px;
+      color: var(--text-muted);
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+    }
+
+    .pill-dot {
+      width: 7px;
+      height: 7px;
+      border-radius: 999px;
+      background: #22c55e;
+    }
+
+    .layout-row {
+      display: grid;
+      grid-template-columns: 2fr 3fr;
+      gap: 12px;
+      height: 100%;
+      min-height: 0;
+    }
+
+    .card {
+      background: var(--card-bg);
+      border-radius: var(--radius-lg);
+      border: 1px solid var(--border-subtle);
+      box-shadow:
+        0 1px 2px rgba(148, 163, 184, 0.2),
+        0 0 0 1px rgba(255, 255, 255, 0.8) inset;
+      padding: 14px 14px 12px;
+      display: flex;
+      flex-direction: column;
+      min-height: 0;
+    }
+
+    .card-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 10px;
+    }
+
+    .card-title {
+      font-size: 13px;
+      font-weight: 600;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .card-title-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 999px;
+      background: var(--accent);
+    }
+
+    .card-subtitle {
+      font-size: 11px;
+      color: var(--text-muted);
+    }
+
+    .card-body {
+      font-size: 12px;
+      color: var(--text-main);
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      min-height: 0;
+    }
+
+    .field-label {
+      display: grid;
+      font-size: 11px;
+      color: var(--text-muted);
+      margin-bottom: 4px;
+    }
+
+    .field-row {
+      display: grid;
+      gap: 8px;
+      align-items: center;
+      flex-wrap: wrap;
+    }
+
+    .input-text {
+      width: 100%;
+      box-sizing: border-box;
+      font-size: 12px;
+      padding: 6px 8px;
+      border-radius: var(--radius-md);
+      border: 1px solid var(--border-subtle);
+      background: #fcfcfa;
+      color: var(--text-main);
+      min-width: 0;
+      flex: 1;
+    }
+
+    .input-text:focus {
+      outline: none;
+      border-color: var(--accent);
+      box-shadow: 0 0 0 1px rgba(37, 99, 235, 0.08);
+      background: #ffffff;
+    }
+
+    .btn {
+      border-radius: var(--radius-md);
+      padding: 6px 10px;
+      font-size: 12px;
+      border: 1px solid rgba(148, 163, 184, 0.7);
+      background: #f9fafb;
+      color: #374151;
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      transition: background 0.15s ease, box-shadow 0.15s ease,
+        transform 0.08s ease;
+      white-space: nowrap;
+    }
+
+    .btn-primary {
+      background: #2563eb;
+      border-color: #1d4ed8;
+      color: white;
+      box-shadow: 0 1px 2px rgba(37, 99, 235, 0.5);
+    }
+
+    .btn:disabled {
+      opacity: 0.6;
+      cursor: default;
+      box-shadow: none;
+    }
+
+    .btn:not(:disabled):hover {
+      background: #eef2ff;
+      box-shadow: 0 1px 3px rgba(148, 163, 184, 0.4);
+      transform: translateY(-0.5px);
+    }
+
+    .btn-primary:not(:disabled):hover {
+      background: #1d4ed8;
+      box-shadow: 0 2px 5px rgba(37, 99, 235, 0.6);
+    }
+
+    .btn-icon {
+      font-size: 13px;
+      opacity: 0.8;
+    }
+
+    .status-text {
+      font-size: 11px;
+      color: var(--text-muted);
+      min-height: 14px;
+    }
+
+    .status-text strong {
+      color: #16a34a;
+      font-weight: 500;
+    }
+
+    .status-text.error {
+      color: #b91c1c;
+    }
+
+    .small {
+      font-size: 11px;
+      color: var(--text-muted);
+    }
+
+    /* 图片列表区域 */
+    .image-list-wrapper {
+      border-radius: var(--radius-md);
+      border: 1px solid var(--border-subtle);
+      background: #fafafa;
+      padding: 8px;
+      flex: 1;
+      min-height: 0;
+    }
+
+    #imageList {
+      height: 100%;
+      overflow: auto;
+      padding-right: 4px;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+
+    .image-item {
+      display: grid;
+      grid-template-columns: auto auto 1fr;
+      gap: 8px;
+      padding: 8px;
+      border-radius: var(--radius-md);
+      background: #ffffff;
+      border: 1px solid var(--border-subtle);
+      align-items: center;
+    }
+
+    .image-item img {
+      width: 64px;
+      height: 64px;
+      object-fit: contain;
+      border-radius: var(--radius-sm);
+      background: #f3f4f6;
+      border: 1px solid rgba(209, 213, 219, 0.8);
+    }
+
+    .image-item img:nth-child(2) {
+      opacity: 0.9;
+    }
+
+    .image-info {
+      font-size: 11px;
+      color: var(--text-muted);
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+
+    .tag {
+      display: inline-flex;
+      align-items: center;
+      padding: 0 6px;
+      border-radius: 999px;
+      font-size: 10px;
+      line-height: 18px;
+      border: 1px solid transparent;
       margin-right: 4px;
     }
+
     .tag-old {
-      background: #1f2937;
-      color: #9ca3af;
+      background: #f3f4f6;
+      color: #4b5563;
+      border-color: #e5e7eb;
     }
+
     .tag-new {
-      background: #047857;
-      color: #ecfdf5;
+      background: #22c55e1a;
+      color: #16a34a;
+      border-color: #bbf7d0;
     }
-    .footer {
+
+    input[type="file"] {
       font-size: 11px;
-      color: #666;
-      margin-top: 10px;
+    }
+
+    .image-actions {
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+      align-items: flex-end;
+    }
+
+    .image-actions .btn {
+      width: 110px;
+      justify-content: center;
+    }
+
+    @media (max-width: 960px) {
+      .app-root {
+        flex-direction: column;
+      }
+      .sidebar {
+        width: 100%;
+        border-right: none;
+        border-bottom: 1px solid var(--border-subtle);
+        flex-direction: row;
+        gap: 12px;
+        align-items: flex-start;
+      }
+      .sidebar-section {
+        flex: 1;
+      }
+      .layout-row {
+        grid-template-columns: 1fr;
+      }
+    }
+
+    @media (max-width: 720px) {
+      .app-root {
+        margin: 0;
+        border-radius: 0;
+      }
+      .sidebar {
+        display: none;
+      }
+      .main-area {
+        padding: 12px;
+      }
     }
   </style>
 </head>
 <body>
-  <h1>Playable 换图 + 跳转工具（离线版）</h1>
+  <div class="app-root">
+    <!-- Sidebar / 左侧 Notion 风说明区 -->
+    <aside class="sidebar">
+      <div>
+        <div class="logo-row">
+          <div class="logo-mark">UA</div>
+          <div>
+            <div class="logo-text-main">PlayableTool · UA</div>
+            <div class="logo-text-sub">H5 素材&跳转一键替换</div>
+          </div>
+        </div>
+        <div class="logo-text-sub">
+          适配：Cocos 单文件 / ZIP / inline&nbsp;data:image
+        </div>
+      </div>
 
-  <div class="section">
-    <h2>Step 1. 上传原始 Playable HTML</h2>
-    <label>
-      原始单文件 H5：
-      <input type="file" id="htmlFileInput" accept=".html,.htm" />
-    </label>
-    <div class="small">
-      说明：支持 Cocos Creator 打包的单文件 playable（包含 <code>window.__adapter_zip__</code> 的那种）。
-    </div>
-    <button id="parseButton" disabled>解析 HTML / 提取图片列表</button>
-    <div id="parseStatus" class="small"></div>
+      <div class="sidebar-section">
+        <div class="sidebar-section-title">Workflow</div>
+        <div class="sidebar-kv">
+          <strong>Step 1.</strong> 上传单文件 H5（.html）<br />
+          <strong>Step 2.</strong> 解析资源，勾选需要替换的图片<br />
+          <strong>Step 3.</strong> 填写目标 <code>App Store</code> 链接
+          <span class="badge-inline">自动覆盖所有原链接</span><br />
+          <strong>Step 4.</strong> 生成新的 playable HTML (记得要检查)
+        </div>
+      </div>
+
+      <div class="sidebar-section">
+        <div class="sidebar-section-title">Notes</div>
+        <div class="sidebar-kv">
+          · 离线工具，仅在浏览器本地运行，如有更新记得看飞书消息 + 最新版本号<br />
+          · 支持识别 <strong>window.__zip</strong>、<strong>__adapter_zip__</strong><br />
+          · ZIP 内 PNG/JPG 可直接替换并重打包<br />
+          · adapter_zip 场景通过运行时 override 生效<br />
+          · 任何 <code>itunes.apple.com</code> / <code>apps.apple.com/...</code>
+          链接都会被替换成当前输入的 URL <br />
+          · 使用过程中遇到任何问题，请在飞书找<strong>子薇</strong>协助处理<br />
+        </div>
+      </div>
+
+      <div class="sidebar-footer">
+        当前为本地工具，仅在浏览器本地读取 / 重写文件，不会上传广告素材。
+      </div>
+    </aside>
+
+    <!-- Main area / 右侧工作区 -->
+    <main class="main-area">
+      <header class="topbar">
+        <div class="topbar-title">
+          Playable 替换工具面板
+          <span>v1 · Cocos / ZIP / Inline</span>
+        </div>
+        <div class="topbar-status">
+          <span class="pill">
+            <span class="pill-dot"></span>
+            本地运行 · 安全
+          </span>
+        </div>
+      </header>
+
+      <section class="layout-row">
+        <!-- 左：文件 & 跳转配置 -->
+        <section class="card">
+          <div class="card-header">
+            <div class="card-title">
+              <div class="card-title-dot"></div>
+              基本配置
+            </div>
+          </div>
+          <div class="card-body">
+            <div>
+              <div class="field-label">1. 选择 playable HTML</div>
+              <div class="field-row">
+                <input
+                  type="file"
+                  id="htmlFileInput"
+                  accept=".html,.htm"
+                  class="input-text"
+                  style="padding: 4px 6px"
+                />
+              </div>
+            </div>
+
+            <div>
+              <div class="field-label">2. 解析资源</div>
+              <div class="field-row">
+                <button id="parseButton" class="btn" disabled>
+                  <span class="btn-icon">🧩</span>
+                  解析 HTML / 提取图片列表
+                </button>
+              </div>
+              <div id="parseStatus" class="status-text small">
+                等待选择文件…
+              </div>
+            </div>
+
+            <div>
+              <div class="field-label">3. 跳转链接（App Store URL，默认填入HelloJackpot）</div>
+              <input
+                id="storeUrlInput"
+                class="input-text"
+                value="https://apps.apple.com/us/app/hello-jackpot-casino-slots/id6535655150"
+                placeholder="如：https://apps.apple.com/…hello-jackpot…"
+              />
+              <div class="small" style="margin-top: 4px">
+                · 所有 App Store 链接会统一替换为此地址<br />
+                · 同时注入 mraid.open / window.open 兜底逻辑
+              </div>
+            </div>
+
+            <div>
+              <div class="field-label">4. 生成新的 playable 文件，记得检查网页效果、确认跳转链接正确</div>
+              <div class="field-row">
+                <button id="buildButton" class="btn btn-primary" disabled>
+                  <span class="btn-icon">💾</span>
+                  生成修改后的 HTML 并下载
+                </button>
+              </div>
+              <div id="buildStatus" class="status-text small"></div>
+            </div>
+          </div>
+        </section>
+
+        <!-- 右：图片列表 -->
+        <section class="card">
+          <div class="card-header">
+            <div class="card-title">
+              <div class="card-title-dot"></div>
+              图片资源列表
+            </div>
+            <div class="card-subtitle">
+              左为原图 · 右为替换后预览，可单独「下载原图」对照修改
+            </div>
+          </div>
+          <div class="card-body">
+            <div class="image-list-wrapper">
+              <div id="imageList">
+                <div class="small">
+                  解析完成后，这里会列出所有被识别的 PNG / JPG / WebP 资源。
+                </div>
+              </div>
+            </div>
+          </div>
+        </section>
+      </section>
+    </main>
   </div>
 
-  <div class="section">
-    <h2>Step 2. 设置跳转链接（mraid.open）</h2>
-    <label for="storeUrlInput">跳转链接（STORE_URL）：</label>
-    <input
-      type="text"
-      id="storeUrlInput"
-      value="https://apps.apple.com/us/app/hello-jackpot-casino-slots/id6535655150"
-    />
-    <div class="small">
-      工具会在生成的 playable 中注入统一跳转函数：优先 <code>mraid.open(STORE_URL)</code>，否则 <code>window.open(STORE_URL)</code>。
-    </div>
-  </div>
-
-  <div class="section">
-    <h2>Step 3. 选择需要替换的图片</h2>
-    <div class="small">
-      上传完成并解析后，会在下方显示所有 PNG / JPG 资源。你可以为其中任意一张选择新的图片文件进行替换。
-      <br />
-      建议只替换关键 UI / 背景等少量图片，控制最终 HTML 体积在 &lt; 5MB。
-    </div>
-    <div id="imageList" class="image-list">
-      <div class="small">请先上传并解析 playable HTML。</div>
-    </div>
-  </div>
-
-  <div class="section">
-    <h2>Step 4. 生成可投放的 Playable</h2>
-    <button id="buildButton" disabled>生成修改后的 HTML 并下载</button>
-    <div id="buildStatus" class="small"></div>
-    <div class="footer">
-      提示：生成的文件是单一 HTML，可直接作为 playable 入口（如 index.html）上传到投放平台。
-    </div>
-  </div>
-
+  <!-- 底部脚本：保持与 main.js 兼容 -->
   <script src="pako_inflate.min.js"></script>
   <script src="jszip.min.js"></script>
-  <!-- 工具核心逻辑 -->
   <script src="main.js"></script>
 </body>
 </html>

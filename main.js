@@ -18,26 +18,59 @@
 // - 直接在 HTML 里字符串级强制替换原有跳转链接（mraid.open("...") / storeUrl / clickTag / 商店 URL）
 
 (function () {
-  let originalHtmlText = "";
+  const state = createInitialState();
+
+  const elements = {
+    htmlFileInput: document.getElementById("htmlFileInput"),
+    parseButton: document.getElementById("parseButton"),
+    parseStatus: document.getElementById("parseStatus"),
+    imageListDiv: document.getElementById("imageList"),
+    buildButton: document.getElementById("buildButton"),
+    buildStatus: document.getElementById("buildStatus"),
+    storeUrlInput: document.getElementById("storeUrlInput")
+  };
+
+  const {
+    htmlFileInput,
+    parseButton,
+    parseStatus,
+    imageListDiv,
+    buildButton,
+    buildStatus,
+    storeUrlInput
+  } = elements;
+
+  function createInitialState() {
+    return {
+      originalHtmlText: "",
+      imageMap: {},      // key -> dataURL����ԭʼ data:image ������key Ϊ��Դ·����ԭʼ dataURL
+      overrideMap: {},   // key -> �� dataURL
+      parseMode: null,   // 'zipPk' | 'adapterZip' | 'inline' | null
+      zipVarName: null,      // "__zip" / "__adapter_zip__" / ...
+      zipAssignStart: null,  // HTML �� zip ��ֵ����ʼ index
+      zipAssignEnd: null,    // HTML �� zip ��ֵ�ν��� index
+      zipJszip: null         // JSZip ʵ������ zipPk ģʽ��
+    };
+  }
+
+  function resetParsedState() {
+    state.imageMap = {};
+    state.overrideMap = {};
+    state.parseMode = null;
+    state.zipVarName = null;
+    state.zipAssignStart = null;
+    state.zipAssignEnd = null;
+    state.zipJszip = null;
+  }
+
+  function resetAllState() {
+    state.originalHtmlText = "";
+    resetParsedState();
+  }
 
   // 解析结果
-  let imageMap = {};      // key -> dataURL（或原始 data:image 串），key 为资源路径或原始 dataURL
-  let overrideMap = {};   // key -> 新 dataURL
-  let parseMode = null;   // 'zipPk' | 'adapterZip' | 'inline' | null
 
   // ZIP 相关状态
-  let zipVarName = null;      // "__zip" / "__adapter_zip__" / ...
-  let zipAssignStart = null;  // HTML 中 zip 赋值段起始 index
-  let zipAssignEnd = null;    // HTML 中 zip 赋值段结束 index
-  let zipJszip = null;        // JSZip 实例（仅 zipPk 模式）
-
-  const htmlFileInput = document.getElementById("htmlFileInput");
-  const parseButton = document.getElementById("parseButton");
-  const parseStatus = document.getElementById("parseStatus");
-  const imageListDiv = document.getElementById("imageList");
-  const buildButton = document.getElementById("buildButton");
-  const buildStatus = document.getElementById("buildStatus");
-  const storeUrlInput = document.getElementById("storeUrlInput");
 
   function setParseStatus(msg) { parseStatus.textContent = msg || ""; }
   function setBuildStatus(msg) { buildStatus.textContent = msg || ""; }
@@ -46,14 +79,8 @@
   htmlFileInput.addEventListener("change", function () {
     const file = htmlFileInput.files[0];
     if (!file) {
-      originalHtmlText = "";
+      resetAllState();
       parseButton.disabled = true;
-      imageMap = {};
-      overrideMap = {};
-      parseMode = null;
-      zipVarName = null;
-      zipAssignStart = zipAssignEnd = null;
-      zipJszip = null;
       imageListDiv.innerHTML = '<div class="small">请先上传 playable HTML 文件。</div>';
       setParseStatus("");
       setBuildStatus("");
@@ -63,14 +90,9 @@
 
     const reader = new FileReader();
     reader.onload = function (e) {
-      originalHtmlText = e.target.result;
+      state.originalHtmlText = e.target.result;
+      resetParsedState();
       parseButton.disabled = false;
-      imageMap = {};
-      overrideMap = {};
-      parseMode = null;
-      zipVarName = null;
-      zipAssignStart = zipAssignEnd = null;
-      zipJszip = null;
       buildButton.disabled = true;
       setBuildStatus("");
       imageListDiv.innerHTML = '<div class="small">文件已加载，点击“解析 HTML / 提取图片列表”。</div>';
@@ -213,7 +235,7 @@
       throw new Error("JSZip 未加载，请确认 jszip.min.js 已正确引入。");
     }
     const zip = await JSZip.loadAsync(bytes);
-    zipJszip = zip;
+    state.zipJszip = zip;
 
     const map = {};
     const tasks = [];
@@ -249,7 +271,7 @@
   function renderImageList() {
     imageListDiv.innerHTML = "";
 
-    const keys = Object.keys(imageMap);
+    const keys = Object.keys(state.imageMap);
     if (!keys.length) {
       imageListDiv.innerHTML = '<div class="small">未找到任何可替换的 PNG/JPG 资源。</div>';
       return;
@@ -257,6 +279,7 @@
 
     let inlineIndex = 0;
     let globalIndex = 0;
+    const fragment = document.createDocumentFragment();
 
     keys.forEach((key) => {
       globalIndex++;
@@ -264,11 +287,11 @@
       itemDiv.className = "image-item";
 
       const imgOld = document.createElement("img");
-      imgOld.src = imageMap[key];
+      imgOld.src = state.imageMap[key];
       imgOld.title = "原始";
 
       const imgNew = document.createElement("img");
-      imgNew.src = overrideMap[key] || "";
+      imgNew.src = state.overrideMap[key] || "";
       imgNew.title = "替换后（如有）";
 
       const infoDiv = document.createElement("div");
@@ -282,7 +305,7 @@
 
       infoDiv.innerHTML =
         '<span class="tag tag-old">原图</span>' +
-        (overrideMap[key] ? '<span class="tag tag-new">已替换</span>' : "") +
+        (state.overrideMap[key] ? '<span class="tag tag-new">已替换</span>' : "") +
         "<div>" + label + "</div>";
 
       const input = document.createElement("input");
@@ -294,7 +317,7 @@
         const r = new FileReader();
         r.onload = function (e) {
           const dataUrl = e.target.result;
-          overrideMap[key] = dataUrl;
+          state.overrideMap[key] = dataUrl;
           imgNew.src = dataUrl;
           renderImageList();
         };
@@ -304,7 +327,7 @@
       const downloadBtn = document.createElement("button");
       downloadBtn.textContent = "下载原图";
       downloadBtn.addEventListener("click", function () {
-        const dataUrl = imageMap[key];
+        const dataUrl = state.imageMap[key];
         const ext = guessExtFromDataUrl(dataUrl);
         let baseName;
         if (/^data:image\//.test(key)) {
@@ -323,49 +346,46 @@
       itemDiv.appendChild(input);
       itemDiv.appendChild(downloadBtn);
 
-      imageListDiv.appendChild(itemDiv);
+      fragment.appendChild(itemDiv);
     });
+
+    imageListDiv.appendChild(fragment);
   }
 
   // ========== 解析入口：点击“解析 HTML / 提取图片列表” ==========
   parseButton.addEventListener("click", async function () {
-    if (!originalHtmlText) {
+    if (!state.originalHtmlText) {
       setParseStatus("请先选择 HTML 文件。");
       return;
     }
     setParseStatus("正在解析 playable 资源，请稍候...");
-    imageMap = {};
-    overrideMap = {};
-    parseMode = null;
-    zipVarName = null;
-    zipAssignStart = zipAssignEnd = null;
-    zipJszip = null;
+    resetParsedState();
     buildButton.disabled = true;
     setBuildStatus("");
 
     try {
       // 1) 优先尝试 zip 变量（__zip / __adapter_zip__ 等）
-      let varName = detectZipVariable(originalHtmlText);
+      let varName = detectZipVariable(state.originalHtmlText);
       if (varName) {
-        const info = extractZipStringWithRange(originalHtmlText, varName);
+        const info = extractZipStringWithRange(state.originalHtmlText, varName);
         if (!info) {
           throw new Error("检测到 " + varName + "，但没有字符串赋值内容。");
         }
-        zipVarName = varName;
-        zipAssignStart = info.start;
-        zipAssignEnd = info.end;
+        state.zipVarName = varName;
+        state.zipAssignStart = info.start;
+        state.zipAssignEnd = info.end;
 
         const bytes = base64ToBytes(info.base64);
 
         if (bytes[0] === 0x50 && bytes[1] === 0x4b) {
           // PK 开头 → ZIP 包
-          parseMode = "zipPk";
+          state.parseMode = "zipPk";
           const resMap = await parseZipPkResourceMapFromBytes(bytes);
           const count = Object.keys(resMap).length;
           if (!count) {
             setParseStatus("解析为 ZIP 包成功，但其中没有 PNG/JPG 资源。");
           } else {
-            imageMap = resMap;
+            state.imageMap = resMap;
             setParseStatus("解析完成（ZIP 包：" + varName + "），找到 " + count + " 张图片。");
             renderImageList();
           }
@@ -380,13 +400,13 @@
             console.warn("adapterZip 解析失败，尝试 inline data:image：", e);
           }
           if (resMapJSON && typeof resMapJSON === "object") {
-            parseMode = "adapterZip";
+            state.parseMode = "adapterZip";
             let count = 0;
             for (const [resPath, content] of Object.entries(resMapJSON)) {
               if (!/\.(png|jpg|jpeg|webp|gif)$/i.test(resPath)) continue;
               const m = /^data:.*?;base64,.+$/s.exec(content);
               if (!m) continue;
-              imageMap[resPath] = content;
+              state.imageMap[resPath] = content;
               count++;
             }
             setParseStatus("解析完成（adapterZip：" + varName + "），找到 " + count + " 张图片。");
@@ -398,11 +418,11 @@
       }
 
       // 2) 如果不是 zip / adapterZip，就尝试 inline data:image playable
-      const inlineMap = parseInlineImageMap(originalHtmlText);
+      const inlineMap = parseInlineImageMap(state.originalHtmlText);
       const inlineKeys = Object.keys(inlineMap);
       if (inlineKeys.length) {
-        parseMode = "inline";
-        imageMap = inlineMap;
+        state.parseMode = "inline";
+        state.imageMap = inlineMap;
         setParseStatus("解析完成（内联 data:image 模式），找到 " + inlineKeys.length + " 张图片。");
         renderImageList();
         buildButton.disabled = false;
@@ -423,8 +443,8 @@
 
   // ========== 构造 adapterZip override 脚本 ==========
   function buildAdapterOverrideScript() {
-    if (parseMode !== "adapterZip") return "";
-    const entries = Object.entries(overrideMap);
+    if (state.parseMode !== "adapterZip") return "";
+    const entries = Object.entries(state.overrideMap);
     if (!entries.length) return "";
 
     const lines = [];
@@ -549,7 +569,7 @@
 
   // ========== 生成 playable_modified.html ==========
   buildButton.addEventListener("click", async function () {
-    if (!originalHtmlText) {
+    if (!state.originalHtmlText) {
       setBuildStatus("请先选择并解析 HTML。");
       return;
     }
@@ -561,38 +581,38 @@
 
     setBuildStatus("正在生成新的 playable HTML...");
 
-    let newHtml = originalHtmlText;
+    let newHtml = state.originalHtmlText;
 
     try {
       // 1) 按不同模式替换图片
-      if (parseMode === "zipPk" && zipVarName && zipAssignStart != null && zipAssignEnd != null && zipJszip) {
+      if (state.parseMode === "zipPk" && state.zipVarName && state.zipAssignStart != null && state.zipAssignEnd != null && state.zipJszip) {
         // ZIP 模式：真正修改 ZIP 包里的 PNG/JPG
-        const entries = Object.entries(overrideMap);
+        const entries = Object.entries(state.overrideMap);
         if (entries.length) {
           entries.forEach(([path, dataUrl]) => {
             const base64 = dataUrl.split(",")[1] || "";
-            zipJszip.file(path, base64, { base64: true });
+            state.zipJszip.file(path, base64, { base64: true });
           });
         }
 
-        const newBytes = await zipJszip.generateAsync({ type: "uint8array" });
+        const newBytes = await state.zipJszip.generateAsync({ type: "uint8array" });
         const newB64 = bytesToBase64(newBytes);
-        const newAssign = 'window.' + zipVarName + '="' + newB64 + '";';
+        const newAssign = 'window.' + state.zipVarName + '="' + newB64 + '";';
 
         newHtml =
-          originalHtmlText.slice(0, zipAssignStart) +
+          state.originalHtmlText.slice(0, state.zipAssignStart) +
           newAssign +
-          originalHtmlText.slice(zipAssignEnd);
-      } else if (parseMode === "inline") {
+          state.originalHtmlText.slice(state.zipAssignEnd);
+      } else if (state.parseMode === "inline") {
         // inline data:image：直接替换 HTML 里的 dataURL
-        const entries = Object.entries(overrideMap);
+        const entries = Object.entries(state.overrideMap);
         if (entries.length) {
           entries.forEach(([origDataUrl, newDataUrl]) => {
             if (!origDataUrl || !newDataUrl) return;
             newHtml = newHtml.split(origDataUrl).join(newDataUrl);
           });
         }
-      } else if (parseMode === "adapterZip") {
+      } else if (state.parseMode === "adapterZip") {
         // adapterZip 的图片替换是在运行时通过 overrideScript 实现，不改 zip 数据本身
         // 此处不修改 newHtml 的 zip 部分
       }
@@ -601,7 +621,7 @@
       newHtml = rewriteStoreUrlInHtml(newHtml, storeUrl);
 
       // 3) 如果是 adapterZip，再注入 overrideScript
-      if (parseMode === "adapterZip") {
+      if (state.parseMode === "adapterZip") {
         const overrideScript = buildAdapterOverrideScript();
         newHtml = insertBeforeBodyEnd(newHtml, overrideScript);
       }
@@ -612,6 +632,7 @@
 
       // 5) 下载
       downloadTextFile("playable_modified.html", newHtml);
+      state.originalHtmlText = newHtml;
       setBuildStatus("已生成 playable_modified.html。");
 
     } catch (e) {
