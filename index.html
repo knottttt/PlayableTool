@@ -359,6 +359,10 @@
       color: var(--text-muted);
     }
 
+    .small.error {
+      color: #b91c1c;
+    }
+
     /* 图片列表区域 */
     .image-list-wrapper {
       border-radius: var(--radius-md);
@@ -380,7 +384,7 @@
 
     .image-item {
       display: grid;
-      grid-template-columns: auto auto 1fr;
+      grid-template-columns: auto auto 1fr auto;
       gap: 8px;
       padding: 8px;
       border-radius: var(--radius-md);
@@ -581,7 +585,25 @@
             </div>
 
             <div>
-              <div class="field-label">3. 跳转链接（App Store URL，默认填入HelloJackpot）</div>
+              <div class="field-label">3. 批量导入图片（按文件名自动匹配）</div>
+              <div class="field-row">
+                <input
+                  type="file"
+                  id="batchImageInput"
+                  accept="image/png,image/jpeg,image/webp,image/gif"
+                  multiple
+                  class="input-text"
+                  style="padding: 4px 6px"
+                  disabled
+                />
+              </div>
+              <div id="batchReplaceStatus" class="status-text small">
+                请先上传并解析 playable HTML。
+              </div>
+            </div>
+
+            <div>
+              <div class="field-label">4. 跳转链接（App Store URL，默认填入HelloJackpot）</div>
               <input
                 id="storeUrlInput"
                 class="input-text"
@@ -595,7 +617,7 @@
             </div>
 
             <div>
-              <div class="field-label">4. 生成新的 playable 文件，记得检查网页效果、确认跳转链接正确</div>
+              <div class="field-label">5. 生成新的 playable 文件，记得检查网页效果、确认跳转链接正确</div>
               <div class="field-row">
                 <button id="buildButton" class="btn btn-primary" disabled>
                   <span class="btn-icon">💾</span>

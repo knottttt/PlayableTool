@@ -25,6 +25,8 @@
     parseButton: document.getElementById("parseButton"),
     parseStatus: document.getElementById("parseStatus"),
     imageListDiv: document.getElementById("imageList"),
+    batchImageInput: document.getElementById("batchImageInput"),
+    batchReplaceStatus: document.getElementById("batchReplaceStatus"),
     buildButton: document.getElementById("buildButton"),
     buildStatus: document.getElementById("buildStatus"),
     storeUrlInput: document.getElementById("storeUrlInput")
@@ -35,6 +37,8 @@
     parseButton,
     parseStatus,
     imageListDiv,
+    batchImageInput,
+    batchReplaceStatus,
     buildButton,
     buildStatus,
     storeUrlInput
@@ -42,13 +46,16 @@
 
   function createInitialState() {
     return {
+      baseHtmlText: "",
       originalHtmlText: "",
+      lastBuiltHtmlText: "",
       imageMap: {},      // key -> dataURL����ԭʼ data:image ������key Ϊ��Դ·����ԭʼ dataURL
       overrideMap: {},   // key -> �� dataURL
       parseMode: null,   // 'zipPk' | 'adapterZip' | 'inline' | null
       zipVarName: null,      // "__zip" / "__adapter_zip__" / ...
       zipAssignStart: null,  // HTML �� zip ��ֵ����ʼ index
       zipAssignEnd: null,    // HTML �� zip ��ֵ�ν��� index
+      zipSourceBytes: null,
       zipJszip: null         // JSZip ʵ������ zipPk ģʽ��
     };
   }
@@ -60,11 +67,14 @@
     state.zipVarName = null;
     state.zipAssignStart = null;
     state.zipAssignEnd = null;
+    state.zipSourceBytes = null;
     state.zipJszip = null;
   }
 
   function resetAllState() {
+    state.baseHtmlText = "";
     state.originalHtmlText = "";
+    state.lastBuiltHtmlText = "";
     resetParsedState();
   }
 
@@ -74,6 +84,38 @@
 
   function setParseStatus(msg) { parseStatus.textContent = msg || ""; }
   function setBuildStatus(msg) { buildStatus.textContent = msg || ""; }
+  function setBatchReplaceStatus(msg, isError) {
+    batchReplaceStatus.textContent = msg || "";
+    batchReplaceStatus.classList.toggle("error", !!isError);
+  }
+
+  const INJECT_MARKERS = {
+    overrideBegin: "<!-- PLAYABLE_TOOL_OVERRIDE_BEGIN -->",
+    overrideEnd: "<!-- PLAYABLE_TOOL_OVERRIDE_END -->",
+    mraidBegin: "<!-- PLAYABLE_TOOL_MRAID_BEGIN -->",
+    mraidEnd: "<!-- PLAYABLE_TOOL_MRAID_END -->"
+  };
+
+  function isBatchReplaceSupported() {
+    return state.parseMode === "zipPk" || state.parseMode === "adapterZip";
+  }
+
+  function updateBatchReplaceAvailability() {
+    if (!batchImageInput) return;
+    const hasImages = Object.keys(state.imageMap).length > 0;
+    const supported = isBatchReplaceSupported();
+    batchImageInput.disabled = !hasImages || !supported;
+
+    if (!hasImages) {
+      setBatchReplaceStatus("解析完成后可按文件名批量替换图片。");
+      return;
+    }
+    if (!supported) {
+      setBatchReplaceStatus("当前模式不支持按文件名批量替换，仅支持单张替换。", true);
+      return;
+    }
+    setBatchReplaceStatus("支持批量替换：按文件名自动匹配资源。");
+  }
 
   // 读取上传 HTML
   htmlFileInput.addEventListener("change", function () {
@@ -84,19 +126,25 @@
       imageListDiv.innerHTML = '<div class="small">请先上传 playable HTML 文件。</div>';
       setParseStatus("");
       setBuildStatus("");
+      setBatchReplaceStatus("请先上传并解析 playable HTML。");
       buildButton.disabled = true;
+      updateBatchReplaceAvailability();
       return;
     }
 
     const reader = new FileReader();
     reader.onload = function (e) {
+      state.baseHtmlText = e.target.result;
       state.originalHtmlText = e.target.result;
+      state.lastBuiltHtmlText = "";
       resetParsedState();
       parseButton.disabled = false;
       buildButton.disabled = true;
       setBuildStatus("");
+      setBatchReplaceStatus("文件已加载，解析后可批量替换图片。");
       imageListDiv.innerHTML = '<div class="small">文件已加载，点击“解析 HTML / 提取图片列表”。</div>';
       setParseStatus("已加载 HTML 文件。");
+      updateBatchReplaceAvailability();
     };
     reader.readAsText(file, "utf-8");
   });
@@ -202,6 +250,135 @@
     return html.slice(0, idx) + "\n" + snippet + html.slice(idx);
   }
 
+  function removeInjectedBlock(html, beginMarker, endMarker) {
+    let result = html;
+    while (true) {
+      const start = result.indexOf(beginMarker);
+      if (start === -1) break;
+      const end = result.indexOf(endMarker, start + beginMarker.length);
+      if (end === -1) {
+        result = result.slice(0, start);
+        break;
+      }
+      result = result.slice(0, start) + result.slice(end + endMarker.length);
+    }
+    return result.replace(/\n{3,}/g, "\n\n");
+  }
+
+  function removeOverrideBlocks(html) {
+    return removeInjectedBlock(html, INJECT_MARKERS.overrideBegin, INJECT_MARKERS.overrideEnd);
+  }
+
+  function removeMraidBlocks(html) {
+    return removeInjectedBlock(html, INJECT_MARKERS.mraidBegin, INJECT_MARKERS.mraidEnd);
+  }
+
+  function getFilenameFromResourceKey(key) {
+    const normalized = key.replace(/\\/g, "/");
+    const parts = normalized.split("/");
+    return parts[parts.length - 1] || normalized;
+  }
+
+  function stripExtension(filename) {
+    return filename.replace(/\.[^.]+$/, "");
+  }
+
+  function normalizeFilename(filename) {
+    return filename.trim().toLowerCase();
+  }
+
+  function findBestImageMatch(filename, imageKeys) {
+    const exactName = filename;
+    const normalizedName = normalizeFilename(filename);
+    const baseName = stripExtension(filename);
+    const normalizedBaseName = normalizeFilename(baseName);
+
+    for (let i = 0; i < imageKeys.length; i++) {
+      const keyFilename = getFilenameFromResourceKey(imageKeys[i]);
+      if (keyFilename === exactName) return imageKeys[i];
+    }
+
+    for (let i = 0; i < imageKeys.length; i++) {
+      const keyFilename = getFilenameFromResourceKey(imageKeys[i]);
+      if (stripExtension(keyFilename) === baseName) return imageKeys[i];
+    }
+
+    for (let i = 0; i < imageKeys.length; i++) {
+      const keyFilename = getFilenameFromResourceKey(imageKeys[i]);
+      if (normalizeFilename(keyFilename) === normalizedName) return imageKeys[i];
+    }
+
+    for (let i = 0; i < imageKeys.length; i++) {
+      const keyFilename = getFilenameFromResourceKey(imageKeys[i]);
+      if (normalizeFilename(stripExtension(keyFilename)) === normalizedBaseName) return imageKeys[i];
+    }
+
+    return null;
+  }
+
+  function readFileAsDataUrl(file) {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = function (e) {
+        resolve(e.target.result);
+      };
+      reader.onerror = function () {
+        reject(reader.error || new Error("读取图片失败"));
+      };
+      reader.readAsDataURL(file);
+    });
+  }
+
+  async function batchReplaceImages(files) {
+    if (!isBatchReplaceSupported()) {
+      setBatchReplaceStatus("当前模式不支持按文件名批量替换，仅支持单张替换。", true);
+      return;
+    }
+
+    const imageKeys = Object.keys(state.imageMap);
+    if (!imageKeys.length) {
+      setBatchReplaceStatus("当前没有可替换的图片资源。", true);
+      return;
+    }
+
+    const fileList = Array.from(files || []);
+    if (!fileList.length) {
+      setBatchReplaceStatus("请选择至少一张图片。", true);
+      return;
+    }
+
+    setBatchReplaceStatus("正在批量匹配并读取图片...");
+
+    const matchedFiles = [];
+    const unmatchedFiles = [];
+
+    for (let i = 0; i < fileList.length; i++) {
+      const file = fileList[i];
+      const matchedKey = findBestImageMatch(file.name, imageKeys);
+      if (!matchedKey) {
+        unmatchedFiles.push(file.name);
+        continue;
+      }
+      matchedFiles.push({ file, key: matchedKey });
+    }
+
+    for (let i = 0; i < matchedFiles.length; i++) {
+      const item = matchedFiles[i];
+      state.overrideMap[item.key] = await readFileAsDataUrl(item.file);
+    }
+
+    renderImageList();
+
+    let message = "已匹配替换：" + matchedFiles.length + "，未匹配：" + unmatchedFiles.length + "。";
+    if (unmatchedFiles.length) {
+      message += " 未匹配文件：" + unmatchedFiles.slice(0, 5).join("、");
+      if (unmatchedFiles.length > 5) {
+        message += " 等 " + unmatchedFiles.length + " 个";
+      }
+    }
+    setBatchReplaceStatus(message, unmatchedFiles.length > 0 && matchedFiles.length === 0);
+  }
+
   // ========== 解析 1：adapterZip（zlib + JSON） ==========
   function parseAdapterZipResourceMapFromBytes(bytes) {
     if (!window.pako || !window.pako.inflate) {
@@ -234,6 +411,7 @@
     if (!window.JSZip) {
       throw new Error("JSZip 未加载，请确认 jszip.min.js 已正确引入。");
     }
+    state.zipSourceBytes = bytes.slice(0);
     const zip = await JSZip.loadAsync(bytes);
     state.zipJszip = zip;
 
@@ -274,6 +452,7 @@
     const keys = Object.keys(state.imageMap);
     if (!keys.length) {
       imageListDiv.innerHTML = '<div class="small">未找到任何可替换的 PNG/JPG 资源。</div>';
+      updateBatchReplaceAvailability();
       return;
     }
 
@@ -325,6 +504,7 @@
       });
 
       const downloadBtn = document.createElement("button");
+      downloadBtn.className = "btn";
       downloadBtn.textContent = "下载原图";
       downloadBtn.addEventListener("click", function () {
         const dataUrl = state.imageMap[key];
@@ -340,16 +520,21 @@
         downloadDataUrlAsFile(dataUrl, filename);
       });
 
+      const actionDiv = document.createElement("div");
+      actionDiv.className = "image-actions";
+      actionDiv.appendChild(input);
+      actionDiv.appendChild(downloadBtn);
+
       itemDiv.appendChild(imgOld);
       itemDiv.appendChild(imgNew);
       itemDiv.appendChild(infoDiv);
-      itemDiv.appendChild(input);
-      itemDiv.appendChild(downloadBtn);
+      itemDiv.appendChild(actionDiv);
 
       fragment.appendChild(itemDiv);
     });
 
     imageListDiv.appendChild(fragment);
+    updateBatchReplaceAvailability();
   }
 
   // ========== 解析入口：点击“解析 HTML / 提取图片列表” ==========
@@ -362,6 +547,7 @@
     resetParsedState();
     buildButton.disabled = true;
     setBuildStatus("");
+    setBatchReplaceStatus("正在分析资源模式...");
 
     try {
       // 1) 优先尝试 zip 变量（__zip / __adapter_zip__ 等）
@@ -436,6 +622,7 @@
       console.error(e);
       setParseStatus("解析失败：" + (e && e.message ? e.message : String(e)));
       imageListDiv.innerHTML = '<div class="small">解析失败，请检查控制台错误信息。</div>';
+      updateBatchReplaceAvailability();
       // 仍允许只注入跳转
       buildButton.disabled = false;
     }
@@ -448,7 +635,6 @@
     if (!entries.length) return "";
 
     const lines = [];
-    lines.push("/* === OVERRIDE RESOURCES BEGIN (UI Tool) === */");
     lines.push("window.__adapter_override__ = window.__adapter_override__ || {};");
 
     entries.forEach(([key, dataUrl]) => {
@@ -473,9 +659,14 @@
     lines.push("    }, 50);");
     lines.push("  }");
     lines.push("})();");
-    lines.push("/* === OVERRIDE RESOURCES END (UI Tool) === */");
-
-    return "<script>\n" + lines.join("\n") + "\n</script>\n";
+    return [
+      INJECT_MARKERS.overrideBegin,
+      "<script>",
+      lines.join("\n"),
+      "</script>",
+      INJECT_MARKERS.overrideEnd,
+      ""
+    ].join("\n");
   }
 
   // ========== 构造 mraid 跳转脚本 ==========
@@ -512,7 +703,14 @@
       lines.push("  window['" + name + "'] = openStore;");
     });
     lines.push("})();");
-    return "<script>\n" + lines.join("\n") + "\n</script>\n";
+    return [
+      INJECT_MARKERS.mraidBegin,
+      "<script>",
+      lines.join("\n"),
+      "</script>",
+      INJECT_MARKERS.mraidEnd,
+      ""
+    ].join("\n");
   }
 
   // ========== 直接改 HTML 里原始跳转链接 ==========
@@ -567,9 +765,23 @@
     URL.revokeObjectURL(url);
   }
 
+  batchImageInput.addEventListener("change", async function () {
+    const files = batchImageInput.files;
+    if (!files || !files.length) return;
+
+    try {
+      await batchReplaceImages(files);
+    } catch (e) {
+      console.error(e);
+      setBatchReplaceStatus("批量替换失败：" + (e && e.message ? e.message : String(e)), true);
+    } finally {
+      batchImageInput.value = "";
+    }
+  });
+
   // ========== 生成 playable_modified.html ==========
   buildButton.addEventListener("click", async function () {
-    if (!state.originalHtmlText) {
+    if (!state.baseHtmlText) {
       setBuildStatus("请先选择并解析 HTML。");
       return;
     }
@@ -581,28 +793,29 @@
 
     setBuildStatus("正在生成新的 playable HTML...");
 
-    let newHtml = state.originalHtmlText;
+    let newHtml = state.baseHtmlText;
 
     try {
       // 1) 按不同模式替换图片
-      if (state.parseMode === "zipPk" && state.zipVarName && state.zipAssignStart != null && state.zipAssignEnd != null && state.zipJszip) {
+      if (state.parseMode === "zipPk" && state.zipVarName && state.zipAssignStart != null && state.zipAssignEnd != null && state.zipSourceBytes) {
         // ZIP 模式：真正修改 ZIP 包里的 PNG/JPG
+        const zip = await JSZip.loadAsync(state.zipSourceBytes.slice(0));
         const entries = Object.entries(state.overrideMap);
         if (entries.length) {
           entries.forEach(([path, dataUrl]) => {
             const base64 = dataUrl.split(",")[1] || "";
-            state.zipJszip.file(path, base64, { base64: true });
+            zip.file(path, base64, { base64: true });
           });
         }
 
-        const newBytes = await state.zipJszip.generateAsync({ type: "uint8array" });
+        const newBytes = await zip.generateAsync({ type: "uint8array" });
         const newB64 = bytesToBase64(newBytes);
         const newAssign = 'window.' + state.zipVarName + '="' + newB64 + '";';
 
         newHtml =
-          state.originalHtmlText.slice(0, state.zipAssignStart) +
+          state.baseHtmlText.slice(0, state.zipAssignStart) +
           newAssign +
-          state.originalHtmlText.slice(state.zipAssignEnd);
+          state.baseHtmlText.slice(state.zipAssignEnd);
       } else if (state.parseMode === "inline") {
         // inline data:image：直接替换 HTML 里的 dataURL
         const entries = Object.entries(state.overrideMap);
@@ -620,19 +833,23 @@
       // 2) 无论哪种模式，都先在 HTML 里强制改跳转链接
       newHtml = rewriteStoreUrlInHtml(newHtml, storeUrl);
 
-      // 3) 如果是 adapterZip，再注入 overrideScript
+      // 3) 先清理历史注入块，避免连续调试时重复堆叠
+      newHtml = removeOverrideBlocks(newHtml);
+      newHtml = removeMraidBlocks(newHtml);
+
+      // 4) 如果是 adapterZip，再注入 overrideScript
       if (state.parseMode === "adapterZip") {
         const overrideScript = buildAdapterOverrideScript();
         newHtml = insertBeforeBodyEnd(newHtml, overrideScript);
       }
 
-      // 4) 最后统一注入 mraid 脚本兜底
+      // 5) 最后统一注入 mraid 脚本兜底
       const mraidScript = buildMraidScript(storeUrl);
       newHtml = insertBeforeBodyEnd(newHtml, mraidScript);
 
-      // 5) 下载
+      // 6) 下载
       downloadTextFile("playable_modified.html", newHtml);
-      state.originalHtmlText = newHtml;
+      state.lastBuiltHtmlText = newHtml;
       setBuildStatus("已生成 playable_modified.html。");
 
     } catch (e) {
@@ -640,5 +857,7 @@
       setBuildStatus("生成失败：" + (e && e.message ? e.message : String(e)));
     }
   });
+
+  setBatchReplaceStatus("请先上传并解析 playable HTML。");
 
 })();
