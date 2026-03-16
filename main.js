@@ -51,11 +51,14 @@
       lastBuiltHtmlText: "",
       imageMap: {},      // key -> dataURL����ԭʼ data:image ������key Ϊ��Դ·����ԭʼ dataURL
       overrideMap: {},   // key -> �� dataURL
-      parseMode: null,   // 'zipPk' | 'adapterZip' | 'inline' | null
+      parseMode: null,   // 'superHtmlZip' | 'superHtmlResMap' | 'adapterZip' | 'inline' | null
       zipVarName: null,      // "__zip" / "__adapter_zip__" / ...
       zipAssignStart: null,  // HTML �� zip ��ֵ����ʼ index
       zipAssignEnd: null,    // HTML �� zip ��ֵ�ν��� index
+      zipAssignType: null,
+      zipBase64: "",
       zipSourceBytes: null,
+      zipAllEntries: [],
       zipJszip: null         // JSZip ʵ������ zipPk ģʽ��
     };
   }
@@ -67,7 +70,10 @@
     state.zipVarName = null;
     state.zipAssignStart = null;
     state.zipAssignEnd = null;
+    state.zipAssignType = null;
+    state.zipBase64 = "";
     state.zipSourceBytes = null;
+    state.zipAllEntries = [];
     state.zipJszip = null;
   }
 
@@ -97,7 +103,11 @@
   };
 
   function isBatchReplaceSupported() {
-    return state.parseMode === "zipPk" || state.parseMode === "adapterZip";
+    return (
+      state.parseMode === "superHtmlZip" ||
+      state.parseMode === "superHtmlResMap" ||
+      state.parseMode === "adapterZip"
+    );
   }
 
   function updateBatchReplaceAvailability() {
@@ -168,32 +178,136 @@
     return null;
   }
 
-  // 提取 zip 赋值段：支持 = / +=，单双引号，多段拼接
-  function extractZipStringWithRange(html, zipVarName) {
-    const re = new RegExp(
-      "window\\." + zipVarName + "\\s*(?:=|\\+=)\\s*([\"'])(.*?)\\1",
-      "gs"
-    );
-    let match;
-    const collected = [];
-    let firstIndex = null;
-    let lastEnd = null;
-
-    while ((match = re.exec(html)) !== null) {
-      if (firstIndex === null) firstIndex = match.index;
-      lastEnd = re.lastIndex;
-      collected.push(match[2]);
+  function skipWhitespace(html, index) {
+    let cursor = index;
+    while (cursor < html.length && /\s/.test(html.charAt(cursor))) {
+      cursor++;
     }
+    return cursor;
+  }
 
-    if (!collected.length) {
+  function consumeJsStringLiteral(html, startIndex) {
+    const quote = html.charAt(startIndex);
+    if (quote !== '"' && quote !== "'") {
       return null;
     }
 
-    return {
-      base64: collected.join(""),
-      start: firstIndex,
-      end: lastEnd
-    };
+    let cursor = startIndex + 1;
+    let value = "";
+
+    while (cursor < html.length) {
+      const ch = html.charAt(cursor);
+      if (ch === "\\") {
+        if (cursor + 1 >= html.length) {
+          return null;
+        }
+        value += ch + html.charAt(cursor + 1);
+        cursor += 2;
+        continue;
+      }
+      if (ch === quote) {
+        return {
+          value: value,
+          end: cursor + 1
+        };
+      }
+      value += ch;
+      cursor++;
+    }
+
+    return null;
+  }
+
+  function extractZipAssignment(htmlText) {
+    const candidates = ZIP_VAR_CANDIDATES.slice(0);
+    candidates.sort(function (a, b) {
+      if (a === "__zip") return -1;
+      if (b === "__zip") return 1;
+      return 0;
+    });
+
+    let bestMatch = null;
+
+    candidates.forEach(function (varName) {
+      const token = "window." + varName;
+      let searchIndex = 0;
+
+      while (searchIndex < htmlText.length) {
+        const start = htmlText.indexOf(token, searchIndex);
+        if (start === -1) break;
+
+        let cursor = skipWhitespace(htmlText, start + token.length);
+        let operator = null;
+        if (htmlText.slice(cursor, cursor + 2) === "+=") {
+          operator = "+=";
+          cursor += 2;
+        } else if (htmlText.charAt(cursor) === "=") {
+          operator = "=";
+          cursor += 1;
+        }
+
+        if (!operator) {
+          searchIndex = start + token.length;
+          continue;
+        }
+
+        cursor = skipWhitespace(htmlText, cursor);
+        const literal = consumeJsStringLiteral(htmlText, cursor);
+        if (!literal) {
+          searchIndex = start + token.length;
+          continue;
+        }
+
+        const segments = [literal.value];
+        const segmentStart = start;
+        let segmentEnd = literal.end;
+        let assignType = operator === "=" ? "single" : "concat";
+        let lookahead = literal.end;
+
+        while (lookahead < htmlText.length) {
+          lookahead = skipWhitespace(htmlText, lookahead);
+          if (htmlText.charAt(lookahead) === ";") {
+            lookahead += 1;
+          }
+          const nextStart = htmlText.indexOf(token, lookahead);
+          if (nextStart !== lookahead) {
+            break;
+          }
+
+          let nextCursor = skipWhitespace(htmlText, nextStart + token.length);
+          if (htmlText.slice(nextCursor, nextCursor + 2) !== "+=") {
+            break;
+          }
+          nextCursor += 2;
+          nextCursor = skipWhitespace(htmlText, nextCursor);
+          const nextLiteral = consumeJsStringLiteral(htmlText, nextCursor);
+          if (!nextLiteral) {
+            break;
+          }
+
+          segments.push(nextLiteral.value);
+          segmentEnd = nextLiteral.end;
+          assignType = "concat";
+          lookahead = nextLiteral.end;
+        }
+
+        const match = {
+          varName: varName,
+          fullBase64: segments.join(""),
+          assignStart: segmentStart,
+          assignEnd: segmentEnd,
+          assignType: assignType
+        };
+
+        if (!bestMatch || match.fullBase64.length > bestMatch.fullBase64.length) {
+          bestMatch = match;
+        }
+
+        searchIndex = segmentEnd;
+      }
+    });
+
+    return bestMatch;
   }
 
   function base64ToBytes(b64) {
@@ -406,19 +520,21 @@
     return obj;
   }
 
-  // ========== 解析 2：ZIP PK（window.__zip = "UEsDB..."） ==========
-  async function parseZipPkResourceMapFromBytes(bytes) {
+  // ========== 解析 2：super-html ZIP（window.__zip = "UEsDB..."） ==========
+  async function parseSuperHtmlZip(base64Zip) {
     if (!window.JSZip) {
       throw new Error("JSZip 未加载，请确认 jszip.min.js 已正确引入。");
     }
-    state.zipSourceBytes = bytes.slice(0);
+
+    const bytes = base64ToBytes(base64Zip);
     const zip = await JSZip.loadAsync(bytes);
-    state.zipJszip = zip;
 
     const map = {};
+    const allEntries = [];
     const tasks = [];
 
     zip.forEach((relPath, file) => {
+      allEntries.push(relPath);
       if (!/\.(png|jpg|jpeg|webp|gif)$/i.test(relPath)) return;
       const mime = guessMimeFromPath(relPath);
       const p = file.async("base64").then((b64) => {
@@ -428,7 +544,53 @@
     });
 
     await Promise.all(tasks);
-    return map;
+    return {
+      imageMap: map,
+      allEntries: allEntries,
+      zipMeta: {
+        zipBase64: base64Zip,
+        zipSourceBytes: bytes.slice(0),
+        zipObject: zip
+      }
+    };
+  }
+
+  async function rebuildSuperHtmlZip(zipObject, overrideMap) {
+    if (!zipObject) {
+      throw new Error("缺少 zipObject，无法重打包 superHtmlZip。");
+    }
+
+    const entries = Object.entries(overrideMap || {});
+    entries.forEach(function (entry) {
+      const path = entry[0];
+      const dataUrl = entry[1];
+      const base64 = (dataUrl.split(",")[1] || "").trim();
+      zipObject.file(path, base64, { base64: true });
+    });
+
+    const newBytes = await zipObject.generateAsync({ type: "uint8array" });
+    return bytesToBase64(newBytes);
+  }
+
+  function parseStaticResImageMapFromHtml(html) {
+    const imageMap = {};
+    const pathToOriginal = {};
+    const re = /"((?:assets|cocos-js|src)\/[^"\n\r]+\.(?:png|jpg|jpeg|webp|gif))":"(data:image\/(?:png|jpeg|jpg|webp|gif);base64,[A-Za-z0-9+/=]+)"/gi;
+    let match;
+
+    while ((match = re.exec(html)) !== null) {
+      const resPath = match[1];
+      const dataUrl = match[2];
+      if (!imageMap[resPath]) {
+        imageMap[resPath] = dataUrl;
+        pathToOriginal[resPath] = dataUrl;
+      }
+    }
+
+    return {
+      imageMap: imageMap,
+      pathToOriginal: pathToOriginal
+    };
   }
 
   // ========== 解析 3：inline data:image ==========
@@ -551,30 +713,52 @@
 
     try {
       // 1) 优先尝试 zip 变量（__zip / __adapter_zip__ 等）
-      let varName = detectZipVariable(state.originalHtmlText);
-      if (varName) {
-        const info = extractZipStringWithRange(state.originalHtmlText, varName);
-        if (!info) {
-          throw new Error("检测到 " + varName + "，但没有字符串赋值内容。");
-        }
+      const info = extractZipAssignment(state.originalHtmlText);
+      if (info) {
+        const varName = info.varName;
         state.zipVarName = varName;
-        state.zipAssignStart = info.start;
-        state.zipAssignEnd = info.end;
+        state.zipAssignStart = info.assignStart;
+        state.zipAssignEnd = info.assignEnd;
+        state.zipAssignType = info.assignType;
+        state.zipBase64 = info.fullBase64;
 
-        const bytes = base64ToBytes(info.base64);
+        const bytes = base64ToBytes(info.fullBase64);
 
         if (bytes[0] === 0x50 && bytes[1] === 0x4b) {
-          // PK 开头 → ZIP 包
-          state.parseMode = "zipPk";
-          const resMap = await parseZipPkResourceMapFromBytes(bytes);
-          const count = Object.keys(resMap).length;
-          if (!count) {
-            setParseStatus("解析为 ZIP 包成功，但其中没有 PNG/JPG 资源。");
-          } else {
-            state.imageMap = resMap;
-            setParseStatus("解析完成（ZIP 包：" + varName + "），找到 " + count + " 张图片。");
+          // PK 开头 → super-html ZIP 包
+          const zipInfo = await parseSuperHtmlZip(info.fullBase64);
+          const count = Object.keys(zipInfo.imageMap).length;
+          state.zipSourceBytes = zipInfo.zipMeta.zipSourceBytes;
+          state.zipJszip = zipInfo.zipMeta.zipObject;
+          state.zipAllEntries = zipInfo.allEntries.slice(0);
+
+          if (count) {
+            state.parseMode = "superHtmlZip";
+            state.imageMap = zipInfo.imageMap;
+            setParseStatus(
+              "解析完成（superHtmlZip：" + varName + "，" + info.assignType + "），找到 " +
+              count + " 张图片。"
+            );
             renderImageList();
+            buildButton.disabled = false;
+            return;
           }
+
+          const resInfo = parseStaticResImageMapFromHtml(state.originalHtmlText);
+          const resCount = Object.keys(resInfo.imageMap).length;
+          if (resCount) {
+            state.parseMode = "superHtmlResMap";
+            state.imageMap = resInfo.imageMap;
+            setParseStatus(
+              "解析完成（superHtmlResMap：" + varName + "），从 window.__res 找到 " +
+              resCount + " 张图片。"
+            );
+          } else {
+            state.parseMode = "superHtmlZip";
+            state.imageMap = zipInfo.imageMap;
+            setParseStatus("解析 superHtmlZip 成功，但 zip 和 window.__res 中都没有可替换图片。");
+          }
+          renderImageList();
           buildButton.disabled = false;
           return;
         } else {
@@ -587,6 +771,7 @@
           }
           if (resMapJSON && typeof resMapJSON === "object") {
             state.parseMode = "adapterZip";
+            state.zipSourceBytes = bytes.slice(0);
             let count = 0;
             for (const [resPath, content] of Object.entries(resMapJSON)) {
               if (!/\.(png|jpg|jpeg|webp|gif)$/i.test(resPath)) continue;
@@ -616,7 +801,7 @@
       }
 
       // 3) 都不是
-      throw new Error("未检测到 __zip / __adapter_zip__ 或内联 data:image 图片资源。");
+      throw new Error("未检测到可解析的 __zip / __adapter_zip__ 或内联 data:image 图片资源。");
 
     } catch (e) {
       console.error(e);
@@ -797,25 +982,26 @@
 
     try {
       // 1) 按不同模式替换图片
-      if (state.parseMode === "zipPk" && state.zipVarName && state.zipAssignStart != null && state.zipAssignEnd != null && state.zipSourceBytes) {
-        // ZIP 模式：真正修改 ZIP 包里的 PNG/JPG
+      if (state.parseMode === "superHtmlZip" && state.zipVarName && state.zipAssignStart != null && state.zipAssignEnd != null && state.zipSourceBytes) {
         const zip = await JSZip.loadAsync(state.zipSourceBytes.slice(0));
-        const entries = Object.entries(state.overrideMap);
-        if (entries.length) {
-          entries.forEach(([path, dataUrl]) => {
-            const base64 = dataUrl.split(",")[1] || "";
-            zip.file(path, base64, { base64: true });
-          });
-        }
-
-        const newBytes = await zip.generateAsync({ type: "uint8array" });
-        const newB64 = bytesToBase64(newBytes);
-        const newAssign = 'window.' + state.zipVarName + '="' + newB64 + '";';
+        const newB64 = await rebuildSuperHtmlZip(zip, state.overrideMap);
+        const newAssign = 'window.' + state.zipVarName + ' = "' + newB64 + '";';
 
         newHtml =
           state.baseHtmlText.slice(0, state.zipAssignStart) +
           newAssign +
           state.baseHtmlText.slice(state.zipAssignEnd);
+      } else if (state.parseMode === "superHtmlResMap") {
+        const entries = Object.entries(state.overrideMap);
+        if (entries.length) {
+          entries.forEach(function (entry) {
+            const path = entry[0];
+            const newDataUrl = entry[1];
+            const oldDataUrl = state.imageMap[path];
+            if (!oldDataUrl || !newDataUrl) return;
+            newHtml = newHtml.split(oldDataUrl).join(newDataUrl);
+          });
+        }
       } else if (state.parseMode === "inline") {
         // inline data:image：直接替换 HTML 里的 dataURL
         const entries = Object.entries(state.overrideMap);
