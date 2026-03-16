@@ -568,7 +568,11 @@
       zipObject.file(path, base64, { base64: true });
     });
 
-    const newBytes = await zipObject.generateAsync({ type: "uint8array" });
+    const newBytes = await zipObject.generateAsync({
+      type: "uint8array",
+      compression: "DEFLATE",
+      compressionOptions: { level: 9 }
+    });
     return bytesToBase64(newBytes);
   }
 

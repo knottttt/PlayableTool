@@ -56,13 +56,13 @@
 
     /* 左侧类似 Notion 的信息栏 */
     .sidebar {
-      width: 260px;
+      width: 320px;
       background: linear-gradient(135deg, #f5f3ed, #f0eee9);
       border-right: 1px solid var(--border-subtle);
-      padding: 18px 18px 16px;
+      padding: 24px 24px 20px;
       display: flex;
       flex-direction: column;
-      gap: 18px;
+      gap: 24px;
     }
 
     .logo-row {
@@ -515,18 +515,18 @@
         </div>
       </div>
 
-      <div class="sidebar-section">
-        <div class="sidebar-section-title">Notes</div>
-        <div class="sidebar-kv">
-          · 离线工具，仅在浏览器本地运行，如有更新记得看飞书消息 + 最新版本号<br />
-          · 支持识别 <strong>window.__zip</strong>、<strong>__adapter_zip__</strong><br />
-          · ZIP 内 PNG/JPG 可直接替换并重打包<br />
-          · adapter_zip 场景通过运行时 override 生效<br />
-          · 任何 <code>itunes.apple.com</code> / <code>apps.apple.com/...</code>
-          链接都会被替换成当前输入的 URL <br />
+        <div class="sidebar-section">
+          <div class="sidebar-section-title">Notes</div>
+          <div class="sidebar-kv">
+          · 工具仅在浏览器本地运行，不会上传 playable 或素材；更新时请留意飞书通知和版本号<br />
+          · 当前支持识别 <strong>window.__zip</strong>、<strong>window.__res</strong>、<strong>__adapter_zip__</strong> 和部分 inline data:image 场景<br />
+          · ZIP 内图片替换后会自动重新压缩回写，尽量避免生成文件体积异常变大<br />
+          · <code>adapter_zip</code> 模式通过运行时 override 生效；如素材未即时变化，建议重新打开页面验证<br />
+          · 工具会统一重写常见商店链接，包括 <code>itunes.apple.com</code>、<code>apps.apple.com</code>、部分内嵌 ZIP 内链接和 mraid / window.open 兜底逻辑<br />
+          · 生成后的 HTML 仍建议手动检查：页面展示、首屏素材、点击跳转、最终文件体积是否正常<br />
           · 使用过程中遇到任何问题，请在飞书找<strong>子薇</strong>协助处理<br />
+          </div>
         </div>
-      </div>
 
       <div class="sidebar-footer">
         当前为本地工具，仅在浏览器本地读取 / 重写文件，不会上传广告素材。
@@ -538,7 +538,7 @@
       <header class="topbar">
         <div class="topbar-title">
           Playable 替换工具面板
-          <span>v3.0.0 · Cocos / ZIP / Inline</span>
+          <span>v3.1.0 · Cocos / ZIP / Inline</span>
         </div>
         <div class="topbar-status">
           <span class="pill">
