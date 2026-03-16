@@ -19,6 +19,9 @@
       --radius-lg: 12px;
       --radius-md: 8px;
       --radius-sm: 6px;
+      --preview-phone-height: clamp(420px, 52vh, 680px);
+      --preview-tablet-height: clamp(420px, 52vh, 620px);
+      --app-shell-height: calc(100vh - 32px);
     }
 
     * {
@@ -28,7 +31,7 @@
     html, body {
       margin: 0;
       padding: 0;
-      height: 100%;
+      min-height: 100%;
       font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI",
         "PingFang SC", "Microsoft YaHei", sans-serif;
       color: var(--text-main);
@@ -37,32 +40,37 @@
 
     body {
       display: flex;
-      align-items: stretch;
+      align-items: flex-start;
       justify-content: center;
+      overflow: hidden;
     }
 
     .app-root {
       display: flex;
       flex: 1;
-      max-width: 1280px;
+      width: min(1680px, calc(100vw - 32px));
+      max-width: 1680px;
+      height: var(--app-shell-height);
       margin: 16px;
-      border-radius: 16px;
-      background: #f9f8f5;
-      box-shadow:
-        0 16px 40px rgba(15, 23, 42, 0.12),
-        0 0 0 1px rgba(148, 163, 184, 0.18);
+      background: transparent;
+      box-shadow: none;
       overflow: hidden;
     }
 
     /* 左侧类似 Notion 的信息栏 */
     .sidebar {
       width: 320px;
+      height: 100%;
       background: linear-gradient(135deg, #f5f3ed, #f0eee9);
-      border-right: 1px solid var(--border-subtle);
+      border: 1px solid var(--border-subtle);
+      border-radius: 16px;
       padding: 24px 24px 20px;
       display: flex;
       flex-direction: column;
       gap: 24px;
+      box-shadow:
+        0 12px 28px rgba(15, 23, 42, 0.06),
+        0 0 0 1px rgba(255, 255, 255, 0.8) inset;
     }
 
     .logo-row {
@@ -151,8 +159,10 @@
       flex: 1;
       display: flex;
       flex-direction: column;
+      height: 100%;
       padding: 18px 20px 16px;
       gap: 10px;
+      min-height: 0;
     }
 
     .topbar {
@@ -205,10 +215,27 @@
 
     .layout-row {
       display: grid;
-      grid-template-columns: 2fr 3fr;
+      grid-template-columns: 1fr;
+      grid-template-rows: auto minmax(0, 1fr);
       gap: 12px;
-      height: 100%;
       min-height: 0;
+      height: 100%;
+      align-content: start;
+    }
+
+    .content-stack {
+      display: grid;
+      flex: 1;
+      grid-template-columns: minmax(520px, 1.18fr) minmax(460px, 1fr);
+      gap: 14px;
+      min-height: 0;
+      height: 100%;
+      align-items: stretch;
+    }
+
+    .preview-panel {
+      min-height: 0;
+      height: 100%;
     }
 
     .card {
@@ -224,10 +251,43 @@
       min-height: 0;
     }
 
+    .config-panel {
+      padding-bottom: 12px;
+    }
+
+    .config-grid {
+      display: grid;
+      grid-template-columns: 1fr;
+      gap: 10px;
+    }
+
+    .config-block {
+      padding: 0;
+      border: 0;
+      background: transparent;
+      min-height: 0;
+    }
+
+    .config-block-title {
+      font-size: 12px;
+      font-weight: 600;
+      color: #374151;
+      margin-bottom: 6px;
+    }
+
+    .config-inline-note {
+      margin-top: 6px;
+      font-size: 11px;
+      color: var(--text-muted);
+      line-height: 1.5;
+    }
+
     .card-header {
       display: flex;
       justify-content: space-between;
       align-items: center;
+      gap: 10px;
+      flex-wrap: wrap;
       margin-bottom: 10px;
     }
 
@@ -249,6 +309,9 @@
     .card-subtitle {
       font-size: 11px;
       color: var(--text-muted);
+      text-align: right;
+      flex: 1;
+      min-width: 280px;
     }
 
     .card-body {
@@ -272,6 +335,11 @@
       gap: 8px;
       align-items: center;
       flex-wrap: wrap;
+    }
+
+    .field-row-inline {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      justify-content: stretch;
     }
 
     .input-text {
@@ -334,6 +402,12 @@
       box-shadow: 0 2px 5px rgba(37, 99, 235, 0.6);
     }
 
+    .btn-wide {
+      width: 100%;
+      justify-content: center;
+      min-height: 36px;
+    }
+
     .btn-icon {
       font-size: 13px;
       opacity: 0.8;
@@ -342,7 +416,7 @@
     .status-text {
       font-size: 11px;
       color: var(--text-muted);
-      min-height: 14px;
+      min-height: 0;
     }
 
     .status-text strong {
@@ -352,6 +426,10 @@
 
     .status-text.error {
       color: #b91c1c;
+    }
+
+    #buildStatus:empty {
+      display: none;
     }
 
     .small {
@@ -368,42 +446,247 @@
       border-radius: var(--radius-md);
       border: 1px solid var(--border-subtle);
       background: #fafafa;
-      padding: 8px;
+      padding: 12px;
       flex: 1;
+      height: auto;
       min-height: 0;
+      max-height: none;
+      overflow: hidden;
+    }
+
+    .image-list-card {
+      min-height: 0;
+      height: 100%;
+    }
+
+    .image-list-card .card-body {
+      flex: 1;
+    }
+
+    .preview-panel .card-body {
+      flex: 1;
     }
 
     #imageList {
       height: 100%;
       overflow: auto;
-      padding-right: 4px;
+      padding-right: 6px;
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: 12px;
+    }
+
+    .preview-controls {
       display: flex;
-      flex-direction: column;
+      align-items: center;
+      justify-content: flex-start;
+      gap: 10px;
+      flex-wrap: wrap;
+    }
+
+    .control-group {
+      display: flex;
+      align-items: center;
       gap: 8px;
+      flex-wrap: wrap;
+    }
+
+    .control-label {
+      font-size: 12px;
+      font-weight: 600;
+      color: #374151;
+    }
+
+    .segmented {
+      display: inline-flex;
+      align-items: center;
+      padding: 3px;
+      border-radius: 10px;
+      border: 1px solid var(--border-subtle);
+      background: #f3f4f6;
+      gap: 4px;
+    }
+
+    .segmented .btn {
+      min-width: 38px;
+      justify-content: center;
+      padding: 6px 10px;
+      border-color: transparent;
+      background: transparent;
+      box-shadow: none;
+    }
+
+    .segmented .btn.active {
+      background: #ffffff;
+      border-color: rgba(148, 163, 184, 0.5);
+      box-shadow: 0 1px 2px rgba(15, 23, 42, 0.08);
+    }
+
+    .device-select {
+      min-width: 160px;
+      max-width: 220px;
+    }
+
+    .preview-note {
+      font-size: 11px;
+      color: var(--text-muted);
+    }
+
+    .preview-frame-wrap {
+      position: relative;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex: 1;
+      width: 100%;
+      min-height: 0;
+      padding: 16px;
+      border-radius: var(--radius-md);
+      border: 1px solid var(--border-subtle);
+      background:
+        radial-gradient(circle at 50% 30%, rgba(255, 255, 255, 0.92), rgba(241, 245, 249, 0.86)),
+        linear-gradient(180deg, rgba(37, 99, 235, 0.05), rgba(15, 23, 42, 0.03)),
+        #eef2f5;
+      overflow: hidden;
+    }
+
+    .preview-empty {
+      position: absolute;
+      inset: 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 24px;
+      text-align: center;
+      color: var(--text-muted);
+      background:
+        linear-gradient(135deg, rgba(37, 99, 235, 0.04), rgba(15, 23, 42, 0.02)),
+        #f8f7f4;
+    }
+
+    .preview-stage {
+      position: relative;
+      width: calc(var(--device-render-width, 390) * 1px * var(--device-scale, 1));
+      height: calc(var(--device-render-height, 844) * 1px * var(--device-scale, 1));
+      aspect-ratio: var(--device-width, 390) / var(--device-height, 844);
+      border-radius: 42px;
+      background: linear-gradient(180deg, #202226, #0f1115);
+      box-shadow:
+        0 28px 52px rgba(15, 23, 42, 0.18),
+        0 0 0 1px rgba(255, 255, 255, 0.12) inset;
+      overflow: hidden;
+      z-index: 1;
+      padding: 14px;
+      transition: width 0.2s ease, height 0.2s ease, border-radius 0.2s ease;
+    }
+
+    .preview-stage.is-hidden {
+      display: none;
+    }
+
+    .preview-stage::before {
+      content: "";
+      position: absolute;
+      left: 50%;
+      top: 12px;
+      width: 120px;
+      height: 28px;
+      transform: translateX(-50%);
+      border-radius: 0 0 18px 18px;
+      background: #0a0c10;
+      z-index: 3;
+      pointer-events: none;
+    }
+
+    .preview-stage.preview-tablet {
+      width: calc(var(--device-render-width, 820) * 1px * var(--device-scale, 1));
+      height: calc(var(--device-render-height, 1180) * 1px * var(--device-scale, 1));
+      aspect-ratio: var(--device-width, 820) / var(--device-height, 1180);
+      border-radius: 34px;
+      padding: 12px;
+    }
+
+    .preview-stage.preview-landscape {
+      width: calc(var(--device-render-width, 844) * 1px * var(--device-scale, 1));
+      height: calc(var(--device-render-height, 390) * 1px * var(--device-scale, 1));
+      aspect-ratio: var(--device-height, 844) / var(--device-width, 390);
+      border-radius: 30px;
+    }
+
+    .preview-stage.preview-tablet.preview-landscape {
+      width: calc(var(--device-render-width, 1180) * 1px * var(--device-scale, 1));
+      height: calc(var(--device-render-height, 820) * 1px * var(--device-scale, 1));
+      aspect-ratio: var(--device-height, 1180) / var(--device-width, 820);
+      border-radius: 28px;
+    }
+
+    .preview-stage.preview-landscape::before {
+      top: 50%;
+      left: 14px;
+      width: 22px;
+      height: 96px;
+      transform: translateY(-50%);
+      border-radius: 0 18px 18px 0;
+    }
+
+    .preview-shell-screen {
+      position: relative;
+      width: 100%;
+      height: 100%;
+      border-radius: 30px;
+      background: #ffffff;
+      overflow: hidden;
+      box-shadow: inset 0 0 0 1px rgba(15, 23, 42, 0.08);
+    }
+
+    .preview-stage.preview-tablet::before {
+      display: none;
+    }
+
+    .preview-stage.preview-tablet .preview-shell-screen {
+      border-radius: 24px;
+    }
+
+    .preview-stage.preview-tablet.preview-landscape .preview-shell-screen {
+      border-radius: 22px;
+    }
+
+    .preview-frame {
+      width: 100%;
+      height: 100%;
+      border: 0;
+      display: none;
+      background: #fff;
     }
 
     .image-item {
-      display: grid;
-      grid-template-columns: auto auto 1fr auto;
-      gap: 8px;
-      padding: 8px;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      padding: 10px;
       border-radius: var(--radius-md);
       background: #ffffff;
       border: 1px solid var(--border-subtle);
-      align-items: center;
+      min-width: 0;
+      box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04);
+    }
+
+    .image-item.has-replacement {
+      background: linear-gradient(180deg, #ffffff, #f8fbff);
+      border-color: rgba(37, 99, 235, 0.2);
     }
 
     .image-item img {
-      width: 64px;
-      height: 64px;
+      width: 100%;
+      height: 108px;
       object-fit: contain;
       border-radius: var(--radius-sm);
       background: #f3f4f6;
       border: 1px solid rgba(209, 213, 219, 0.8);
     }
 
-    .image-item img:nth-child(2) {
-      opacity: 0.9;
+    .image-item.has-replacement img {
+      height: 84px;
     }
 
     .image-info {
@@ -412,6 +695,8 @@
       display: flex;
       flex-direction: column;
       gap: 4px;
+      align-items: center;
+      text-align: center;
     }
 
     .tag {
@@ -444,23 +729,35 @@
     .image-actions {
       display: flex;
       flex-direction: column;
-      gap: 4px;
-      align-items: flex-end;
+      gap: 6px;
+      align-items: stretch;
     }
 
     .image-actions .btn {
-      width: 110px;
+      width: 100%;
       justify-content: center;
     }
 
     @media (max-width: 960px) {
+      :root {
+        --preview-phone-height: clamp(440px, 56vh, 640px);
+        --preview-tablet-height: clamp(420px, 54vh, 600px);
+      }
+      body {
+        overflow-y: auto;
+        overflow-x: hidden;
+      }
       .app-root {
         flex-direction: column;
+        width: min(100vw - 24px, 1680px);
+        height: auto;
+        min-height: calc(100vh - 24px);
+        overflow: visible;
       }
       .sidebar {
         width: 100%;
-        border-right: none;
-        border-bottom: 1px solid var(--border-subtle);
+        height: auto;
+        border-right: 1px solid var(--border-subtle);
         flex-direction: row;
         gap: 12px;
         align-items: flex-start;
@@ -468,21 +765,66 @@
       .sidebar-section {
         flex: 1;
       }
+      .content-stack {
+        grid-template-columns: 1fr;
+      }
       .layout-row {
         grid-template-columns: 1fr;
+      }
+      .card-subtitle {
+        text-align: left;
+        min-width: 0;
+      }
+      .image-list-wrapper {
+        min-height: 260px;
+      }
+      #imageList {
+        grid-template-columns: repeat(3, minmax(0, 1fr));
       }
     }
 
     @media (max-width: 720px) {
+      :root {
+        --preview-phone-height: min(68vh, 560px);
+        --preview-tablet-height: min(62vh, 520px);
+      }
+      body {
+        overflow-y: auto;
+      }
       .app-root {
         margin: 0;
-        border-radius: 0;
+        width: 100vw;
+        min-height: 100vh;
       }
       .sidebar {
         display: none;
       }
       .main-area {
+        height: auto;
         padding: 12px;
+      }
+      .preview-frame-wrap {
+        min-height: calc(var(--preview-phone-height) + 24px);
+        padding: 12px;
+      }
+      .preview-stage {
+        width: min(100%, calc((100vw - 48px) * 0.95));
+        height: auto;
+      }
+      .preview-stage.preview-landscape {
+        width: 100%;
+      }
+      .field-row-inline {
+        grid-template-columns: 1fr;
+      }
+      .image-list-wrapper {
+        min-height: 240px;
+      }
+      #imageList {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+      }
+      .preview-controls {
+        align-items: flex-start;
       }
     }
   </style>
@@ -508,10 +850,10 @@
         <div class="sidebar-section-title">Workflow</div>
         <div class="sidebar-kv">
           <strong>Step 1.</strong> 上传单文件 H5（.html）<br />
-          <strong>Step 2.</strong> 解析资源，勾选需要替换的图片<br />
+          <strong>Step 2.</strong> 上传后自动解析资源，勾选需要替换的图片<br />
           <strong>Step 3.</strong> 填写目标 <code>App Store</code> 链接
           <span class="badge-inline">自动覆盖所有原链接</span><br />
-          <strong>Step 4.</strong> 生成新的 playable HTML (记得要检查)
+          <strong>Step 4.</strong> 生成并预览，确认无误后再下载 HTML
         </div>
       </div>
 
@@ -523,7 +865,7 @@
           · ZIP 内图片替换后会自动重新压缩回写，尽量避免生成文件体积异常变大<br />
           · <code>adapter_zip</code> 模式通过运行时 override 生效；如素材未即时变化，建议重新打开页面验证<br />
           · 工具会统一重写常见商店链接，包括 <code>itunes.apple.com</code>、<code>apps.apple.com</code>、部分内嵌 ZIP 内链接和 mraid / window.open 兜底逻辑<br />
-          · 生成后的 HTML 仍建议手动检查：页面展示、首屏素材、点击跳转、最终文件体积是否正常<br />
+          · 生成后支持直接在面板里本地预览；最终仍建议下载 HTML 抽查页面展示、首屏素材、点击跳转和文件体积<br />
           · 使用过程中遇到任何问题，请在飞书找<strong>子薇</strong>协助处理<br />
           </div>
         </div>
@@ -538,7 +880,7 @@
       <header class="topbar">
         <div class="topbar-title">
           Playable 替换工具面板
-          <span>v3.1.0 · Cocos / ZIP / Inline</span>
+          <span>v4.0.0 · Cocos / ZIP / Inline</span>
         </div>
         <div class="topbar-status">
           <span class="pill">
@@ -548,96 +890,94 @@
         </div>
       </header>
 
+      <div class="content-stack">
       <section class="layout-row">
         <!-- 左：文件 & 跳转配置 -->
-        <section class="card">
+        <section class="card config-panel">
           <div class="card-header">
             <div class="card-title">
               <div class="card-title-dot"></div>
-              基本配置
+              Basic Configurations
+            </div>
+            <div class="card-subtitle">
+              先完成文件解析和链接设置，再生成右侧预览
             </div>
           </div>
           <div class="card-body">
-            <div>
-              <div class="field-label">1. 选择 playable HTML</div>
-              <div class="field-row">
+            <div class="config-grid">
+              <div class="config-block">
+                <div class="config-block-title">1. 选择 Playable HTML</div>
+                <div class="field-row">
+                  <input
+                    type="file"
+                    id="htmlFileInput"
+                    accept=".html,.htm"
+                    class="input-text"
+                    style="padding: 4px 6px"
+                  />
+                </div>
+              </div>
+
+              <div class="config-block">
+                <div class="config-block-title">2. App Store URL</div>
                 <input
-                  type="file"
-                  id="htmlFileInput"
-                  accept=".html,.htm"
+                  id="storeUrlInput"
                   class="input-text"
-                  style="padding: 4px 6px"
+                  value="https://apps.apple.com/us/app/hello-jackpot-casino-slots/id6535655150"
+                  placeholder="如：https://apps.apple.com/…hello-jackpot…"
                 />
+                <div class="config-inline-note">
+                  将统一注入 mraid.open / window.open，并替换原有 App Store 链接
+                </div>
               </div>
-            </div>
 
-            <div>
-              <div class="field-label">2. 解析资源</div>
-              <div class="field-row">
-                <button id="parseButton" class="btn" disabled>
-                  <span class="btn-icon">🧩</span>
-                  解析 HTML / 提取图片列表
-                </button>
+              <div class="config-block">
+                <div class="config-block-title">3. 批量导入图片（按文件名自动匹配）</div>
+                <div class="field-row">
+                  <input
+                    type="file"
+                    id="batchImageInput"
+                    accept="image/png,image/jpeg,image/webp,image/gif"
+                    multiple
+                    class="input-text"
+                    style="padding: 4px 6px"
+                    disabled
+                  />
+                </div>
+                <div id="batchReplaceStatus" class="status-text small">
+                  请先上传并解析 playable HTML。
+                </div>
+                <div id="parseStatus" class="status-text small">
+                  等待选择文件…
+                </div>
               </div>
-              <div id="parseStatus" class="status-text small">
-                等待选择文件…
-              </div>
-            </div>
 
-            <div>
-              <div class="field-label">3. 批量导入图片（按文件名自动匹配）</div>
-              <div class="field-row">
-                <input
-                  type="file"
-                  id="batchImageInput"
-                  accept="image/png,image/jpeg,image/webp,image/gif"
-                  multiple
-                  class="input-text"
-                  style="padding: 4px 6px"
-                  disabled
-                />
-              </div>
-              <div id="batchReplaceStatus" class="status-text small">
-                请先上传并解析 playable HTML。
-              </div>
-            </div>
-
-            <div>
-              <div class="field-label">4. 跳转链接（App Store URL，默认填入HelloJackpot）</div>
-              <input
-                id="storeUrlInput"
-                class="input-text"
-                value="https://apps.apple.com/us/app/hello-jackpot-casino-slots/id6535655150"
-                placeholder="如：https://apps.apple.com/…hello-jackpot…"
-              />
-              <div class="small" style="margin-top: 4px">
-                · 所有 App Store 链接会统一替换为此地址<br />
-                · 同时注入 mraid.open / window.open 兜底逻辑
-              </div>
-            </div>
-
-            <div>
-              <div class="field-label">5. 生成新的 playable 文件，记得检查网页效果、确认跳转链接正确</div>
-              <div class="field-row">
-                <button id="buildButton" class="btn btn-primary" disabled>
-                  <span class="btn-icon">💾</span>
-                  生成修改后的 HTML 并下载
-                </button>
-              </div>
-              <div id="buildStatus" class="status-text small"></div>
+              <div class="config-block">
+                <div class="config-block-title">4. 生成并预览，确认效果无误后再下载 HTML</div>
+                <div class="field-row field-row-inline">
+                  <button id="buildButton" class="btn btn-primary btn-wide" disabled>
+                    <span class="btn-icon">👁️</span>
+                    Start Preview
+                  </button>
+                  <button id="downloadButton" class="btn btn-wide" disabled>
+                    <span class="btn-icon">💾</span>
+                    Download HTML
+                  </button>
+                </div>
+                <div id="buildStatus" class="status-text small"></div>
             </div>
           </div>
         </section>
 
         <!-- 右：图片列表 -->
-        <section class="card">
+        <section class="card image-list-card">
           <div class="card-header">
             <div class="card-title">
               <div class="card-title-dot"></div>
               图片资源列表
             </div>
             <div class="card-subtitle">
-              左为原图 · 右为替换后预览，可单独「下载原图」对照修改
+              上传替换素材并实时生成效果，可直接下载原图作为对照参考
             </div>
           </div>
           <div class="card-body">
@@ -651,6 +991,66 @@
           </div>
         </section>
       </section>
+
+      <section class="card preview-panel">
+        <div class="card-header">
+          <div class="card-title">
+            <div class="card-title-dot"></div>
+            Device Controls
+          </div>
+          <div class="card-subtitle">
+            切换设备尺寸与横竖方向，刷新当前预览
+          </div>
+        </div>
+        <div class="card-body">
+          <div class="preview-controls">
+            <div class="control-group">
+              <span class="control-label">设备</span>
+              <select id="devicePresetSelect" class="input-text device-select">
+                <option value="iphone-se">iPhone SE</option>
+                <option value="iphone-xr">iPhone XR</option>
+                <option value="iphone-12-pro" selected>iPhone 12 Pro</option>
+                <option value="iphone-14-pro-max">iPhone 14 Pro Max</option>
+                <option value="pixel-7">Pixel 7</option>
+                <option value="galaxy-s8-plus">Samsung Galaxy S8+</option>
+                <option value="galaxy-s20-ultra">Samsung Galaxy S20 Ultra</option>
+                <option value="ipad-mini">iPad Mini</option>
+                <option value="ipad-air">iPad Air</option>
+                <option value="ipad-pro">iPad Pro</option>
+              </select>
+            </div>
+            <div class="control-group">
+              <span class="control-label">方向</span>
+              <div class="segmented">
+                <button id="orientationPortraitButton" class="btn active" type="button">竖屏</button>
+                <button id="orientationLandscapeButton" class="btn" type="button">横屏</button>
+              </div>
+            </div>
+            <button id="refreshPreviewButton" class="btn btn-primary" disabled>
+              <span class="btn-icon">↻</span>
+              Refresh Preview
+            </button>
+          </div>
+          <div class="preview-note">
+            预览仅用于本地快速验收，最终仍建议下载 HTML 后抽查真实环境表现。
+          </div>
+          <div id="previewFrameWrap" class="preview-frame-wrap">
+            <div id="previewEmpty" class="preview-empty">
+              生成后可在这里查看替换结果，无需先下载 HTML。
+            </div>
+            <div id="previewStage" class="preview-stage is-hidden">
+              <div class="preview-shell-screen">
+                <iframe
+                  id="previewFrame"
+                  class="preview-frame"
+                  title="Playable Preview"
+                ></iframe>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+      </div>
     </main>
   </div>
 

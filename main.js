@@ -22,33 +22,67 @@
 
   const elements = {
     htmlFileInput: document.getElementById("htmlFileInput"),
-    parseButton: document.getElementById("parseButton"),
     parseStatus: document.getElementById("parseStatus"),
     imageListDiv: document.getElementById("imageList"),
     batchImageInput: document.getElementById("batchImageInput"),
     batchReplaceStatus: document.getElementById("batchReplaceStatus"),
     buildButton: document.getElementById("buildButton"),
+    downloadButton: document.getElementById("downloadButton"),
     buildStatus: document.getElementById("buildStatus"),
-    storeUrlInput: document.getElementById("storeUrlInput")
+    storeUrlInput: document.getElementById("storeUrlInput"),
+    previewFrameWrap: document.getElementById("previewFrameWrap"),
+    previewStage: document.getElementById("previewStage"),
+    previewFrame: document.getElementById("previewFrame"),
+    previewEmpty: document.getElementById("previewEmpty"),
+    refreshPreviewButton: document.getElementById("refreshPreviewButton"),
+    downloadPreviewButton: document.getElementById("downloadPreviewButton"),
+    devicePresetSelect: document.getElementById("devicePresetSelect"),
+    orientationPortraitButton: document.getElementById("orientationPortraitButton"),
+    orientationLandscapeButton: document.getElementById("orientationLandscapeButton")
   };
 
   const {
     htmlFileInput,
-    parseButton,
     parseStatus,
     imageListDiv,
     batchImageInput,
     batchReplaceStatus,
     buildButton,
+    downloadButton,
     buildStatus,
-    storeUrlInput
+    storeUrlInput,
+    previewFrameWrap,
+    previewStage,
+    previewFrame,
+    previewEmpty,
+    refreshPreviewButton,
+    downloadPreviewButton,
+    devicePresetSelect,
+    orientationPortraitButton,
+    orientationLandscapeButton
   } = elements;
+
+  const DEVICE_PRESETS = {
+    "iphone-se": { width: 375, height: 667, family: "phone" },
+    "iphone-xr": { width: 414, height: 896, family: "phone" },
+    "iphone-12-pro": { width: 390, height: 844, family: "phone" },
+    "iphone-14-pro-max": { width: 430, height: 932, family: "phone" },
+    "pixel-7": { width: 412, height: 915, family: "phone" },
+    "galaxy-s8-plus": { width: 360, height: 740, family: "phone" },
+    "galaxy-s20-ultra": { width: 412, height: 915, family: "phone" },
+    "ipad-mini": { width: 744, height: 1133, family: "tablet" },
+    "ipad-air": { width: 820, height: 1180, family: "tablet" },
+    "ipad-pro": { width: 1024, height: 1366, family: "tablet" }
+  };
 
   function createInitialState() {
     return {
       baseHtmlText: "",
       originalHtmlText: "",
       lastBuiltHtmlText: "",
+      previewObjectUrl: "",
+      previewDevicePreset: "iphone-12-pro",
+      previewOrientation: "portrait",
       imageMap: {},      // key -> dataURL����ԭʼ data:image ������key Ϊ��Դ·����ԭʼ dataURL
       overrideMap: {},   // key -> �� dataURL
       parseMode: null,   // 'superHtmlZip' | 'superHtmlResMap' | 'adapterZip' | 'inline' | null
@@ -81,6 +115,7 @@
     state.baseHtmlText = "";
     state.originalHtmlText = "";
     state.lastBuiltHtmlText = "";
+    clearPreview();
     resetParsedState();
   }
 
@@ -93,6 +128,91 @@
   function setBatchReplaceStatus(msg, isError) {
     batchReplaceStatus.textContent = msg || "";
     batchReplaceStatus.classList.toggle("error", !!isError);
+  }
+
+  function updateDownloadAvailability() {
+    const enabled = !!state.lastBuiltHtmlText;
+    if (downloadButton) downloadButton.disabled = !enabled;
+    if (downloadPreviewButton) downloadPreviewButton.disabled = !enabled;
+    if (refreshPreviewButton) refreshPreviewButton.disabled = !enabled;
+  }
+
+  function clearPreview() {
+    if (state.previewObjectUrl) {
+      URL.revokeObjectURL(state.previewObjectUrl);
+      state.previewObjectUrl = "";
+    }
+    if (previewStage) {
+      previewStage.classList.add("is-hidden");
+    }
+    if (previewFrame) {
+      previewFrame.removeAttribute("src");
+      previewFrame.style.display = "none";
+    }
+    if (previewEmpty) {
+      previewEmpty.style.display = "flex";
+    }
+    updateDownloadAvailability();
+  }
+
+  function showPreviewFromHtml(html) {
+    clearPreview();
+    state.previewObjectUrl = URL.createObjectURL(
+      new Blob([html], { type: "text/html;charset=utf-8" })
+    );
+    if (previewStage) {
+      previewStage.classList.remove("is-hidden");
+    }
+    if (previewFrame) {
+      previewFrame.src = state.previewObjectUrl;
+      previewFrame.style.display = "block";
+    }
+    if (previewEmpty) {
+      previewEmpty.style.display = "none";
+    }
+    updateDownloadAvailability();
+  }
+
+  function downloadLastBuiltHtml() {
+    if (!state.lastBuiltHtmlText) {
+      setBuildStatus("请先生成预览，再下载 HTML。");
+      return;
+    }
+    downloadTextFile("playable_modified.html", state.lastBuiltHtmlText);
+    setBuildStatus("已下载 playable_modified.html。");
+  }
+
+  function applyPreviewMode() {
+    if (!previewStage) return;
+    const preset = DEVICE_PRESETS[state.previewDevicePreset] || DEVICE_PRESETS["iphone-12-pro"];
+    const isLandscape = state.previewOrientation === "landscape";
+    const renderWidth = isLandscape ? preset.height : preset.width;
+    const renderHeight = isLandscape ? preset.width : preset.height;
+    let scale = 1;
+
+    if (previewFrameWrap) {
+      const availableWidth = Math.max(previewFrameWrap.clientWidth - 32, 1);
+      const availableHeight = Math.max(previewFrameWrap.clientHeight - 32, 1);
+      scale = Math.min(availableWidth / renderWidth, availableHeight / renderHeight, 1);
+    }
+
+    previewStage.style.setProperty("--device-width", String(preset.width));
+    previewStage.style.setProperty("--device-height", String(preset.height));
+    previewStage.style.setProperty("--device-render-width", String(renderWidth));
+    previewStage.style.setProperty("--device-render-height", String(renderHeight));
+    previewStage.style.setProperty("--device-scale", String(scale));
+    previewStage.classList.toggle("preview-tablet", preset.family === "tablet");
+    previewStage.classList.toggle("preview-landscape", isLandscape);
+
+    if (devicePresetSelect) {
+      devicePresetSelect.value = state.previewDevicePreset;
+    }
+    if (orientationPortraitButton) {
+      orientationPortraitButton.classList.toggle("active", state.previewOrientation === "portrait");
+    }
+    if (orientationLandscapeButton) {
+      orientationLandscapeButton.classList.toggle("active", state.previewOrientation === "landscape");
+    }
   }
 
   const INJECT_MARKERS = {
@@ -132,29 +252,34 @@
     const file = htmlFileInput.files[0];
     if (!file) {
       resetAllState();
-      parseButton.disabled = true;
       imageListDiv.innerHTML = '<div class="small">请先上传 playable HTML 文件。</div>';
       setParseStatus("");
       setBuildStatus("");
       setBatchReplaceStatus("请先上传并解析 playable HTML。");
       buildButton.disabled = true;
+      updateDownloadAvailability();
       updateBatchReplaceAvailability();
       return;
     }
 
     const reader = new FileReader();
-    reader.onload = function (e) {
+    reader.onload = async function (e) {
       state.baseHtmlText = e.target.result;
       state.originalHtmlText = e.target.result;
       state.lastBuiltHtmlText = "";
+      clearPreview();
       resetParsedState();
-      parseButton.disabled = false;
       buildButton.disabled = true;
       setBuildStatus("");
-      setBatchReplaceStatus("文件已加载，解析后可批量替换图片。");
-      imageListDiv.innerHTML = '<div class="small">文件已加载，点击“解析 HTML / 提取图片列表”。</div>';
-      setParseStatus("已加载 HTML 文件。");
+      setBatchReplaceStatus("文件已加载，正在自动解析资源...");
+      imageListDiv.innerHTML = '<div class="small">文件已加载，正在自动解析图片资源，请稍候。</div>';
+      setParseStatus("已加载 HTML 文件，正在自动解析...");
       updateBatchReplaceAvailability();
+      try {
+        await parseCurrentHtml();
+      } catch (error) {
+        console.error(error);
+      }
     };
     reader.readAsText(file, "utf-8");
   });
@@ -638,6 +763,11 @@
       const imgNew = document.createElement("img");
       imgNew.src = state.overrideMap[key] || "";
       imgNew.title = "替换后（如有）";
+      if (!state.overrideMap[key]) {
+        imgNew.style.display = "none";
+      } else {
+        itemDiv.classList.add("has-replacement");
+      }
 
       const infoDiv = document.createElement("div");
       infoDiv.className = "image-info";
@@ -664,6 +794,7 @@
           const dataUrl = e.target.result;
           state.overrideMap[key] = dataUrl;
           imgNew.src = dataUrl;
+          imgNew.style.display = "block";
           renderImageList();
         };
         r.readAsDataURL(file);
@@ -703,14 +834,15 @@
     updateBatchReplaceAvailability();
   }
 
-  // ========== 解析入口：点击“解析 HTML / 提取图片列表” ==========
-  parseButton.addEventListener("click", async function () {
+  async function parseCurrentHtml() {
     if (!state.originalHtmlText) {
       setParseStatus("请先选择 HTML 文件。");
-      return;
+      return false;
     }
     setParseStatus("正在解析 playable 资源，请稍候...");
     resetParsedState();
+    state.lastBuiltHtmlText = "";
+    clearPreview();
     buildButton.disabled = true;
     setBuildStatus("");
     setBatchReplaceStatus("正在分析资源模式...");
@@ -745,7 +877,7 @@
             );
             renderImageList();
             buildButton.disabled = false;
-            return;
+            return true;
           }
 
           const resInfo = parseStaticResImageMapFromHtml(state.originalHtmlText);
@@ -764,7 +896,7 @@
           }
           renderImageList();
           buildButton.disabled = false;
-          return;
+          return true;
         } else {
           // 非 PK → 尝试 adapterZip JSON
           let resMapJSON = null;
@@ -787,7 +919,7 @@
             setParseStatus("解析完成（adapterZip：" + varName + "），找到 " + count + " 张图片。");
             renderImageList();
             buildButton.disabled = false;
-            return;
+            return true;
           }
         }
       }
@@ -801,7 +933,7 @@
         setParseStatus("解析完成（内联 data:image 模式），找到 " + inlineKeys.length + " 张图片。");
         renderImageList();
         buildButton.disabled = false;
-        return;
+        return true;
       }
 
       // 3) 都不是
@@ -814,8 +946,9 @@
       updateBatchReplaceAvailability();
       // 仍允许只注入跳转
       buildButton.disabled = false;
+      return false;
     }
-  });
+  }
 
   // ========== 构造 adapterZip override 脚本 ==========
   function buildAdapterOverrideScript() {
@@ -968,6 +1101,48 @@
     }
   });
 
+  if (downloadButton) {
+    downloadButton.addEventListener("click", downloadLastBuiltHtml);
+  }
+
+  if (downloadPreviewButton) {
+    downloadPreviewButton.addEventListener("click", downloadLastBuiltHtml);
+  }
+
+  if (refreshPreviewButton) {
+    refreshPreviewButton.addEventListener("click", function () {
+      if (!state.lastBuiltHtmlText) {
+        setBuildStatus("请先生成预览。");
+        return;
+      }
+      showPreviewFromHtml(state.lastBuiltHtmlText);
+      setBuildStatus("已刷新预览。");
+    });
+  }
+
+  if (devicePresetSelect) {
+    devicePresetSelect.addEventListener("change", function () {
+      state.previewDevicePreset = devicePresetSelect.value;
+      applyPreviewMode();
+    });
+  }
+
+  if (orientationPortraitButton) {
+    orientationPortraitButton.addEventListener("click", function () {
+      state.previewOrientation = "portrait";
+      applyPreviewMode();
+    });
+  }
+
+  if (orientationLandscapeButton) {
+    orientationLandscapeButton.addEventListener("click", function () {
+      state.previewOrientation = "landscape";
+      applyPreviewMode();
+    });
+  }
+
+  window.addEventListener("resize", applyPreviewMode);
+
   // ========== 生成 playable_modified.html ==========
   buildButton.addEventListener("click", async function () {
     if (!state.baseHtmlText) {
@@ -981,6 +1156,8 @@
     }
 
     setBuildStatus("正在生成新的 playable HTML...");
+    state.lastBuiltHtmlText = "";
+    clearPreview();
 
     let newHtml = state.baseHtmlText;
 
@@ -1037,10 +1214,10 @@
       const mraidScript = buildMraidScript(storeUrl);
       newHtml = insertBeforeBodyEnd(newHtml, mraidScript);
 
-      // 6) 下载
-      downloadTextFile("playable_modified.html", newHtml);
+      // 6) 更新预览与下载状态
       state.lastBuiltHtmlText = newHtml;
-      setBuildStatus("已生成 playable_modified.html。");
+      showPreviewFromHtml(newHtml);
+      setBuildStatus("已生成并更新预览，可继续下载 HTML。");
 
     } catch (e) {
       console.error(e);
@@ -1049,5 +1226,7 @@
   });
 
   setBatchReplaceStatus("请先上传并解析 playable HTML。");
+  applyPreviewMode();
+  updateDownloadAvailability();
 
 })();
