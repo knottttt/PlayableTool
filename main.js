@@ -87,13 +87,15 @@
       overrideMap: {},   // key -> �� dataURL
       parseMode: null,   // 'superHtmlZip' | 'superHtmlResMap' | 'adapterZip' | 'inline' | null
       zipVarName: null,      // "__zip" / "__adapter_zip__" / ...
+      zipSourceLabel: "",    // 用于 UI 展示 zip 来源
       zipAssignStart: null,  // HTML �� zip ��ֵ����ʼ index
       zipAssignEnd: null,    // HTML �� zip ��ֵ�ν��� index
       zipAssignType: null,
       zipBase64: "",
       zipSourceBytes: null,
       zipAllEntries: [],
-      zipJszip: null         // JSZip ʵ������ zipPk ģʽ��
+      zipJszip: null,        // JSZip ʵ������ zipPk ģʽ��
+      zipInlineImageMeta: {} // syntheticKey -> { zipPath, originalDataUrl, displayName }
     };
   }
 
@@ -102,6 +104,7 @@
     state.overrideMap = {};
     state.parseMode = null;
     state.zipVarName = null;
+    state.zipSourceLabel = "";
     state.zipAssignStart = null;
     state.zipAssignEnd = null;
     state.zipAssignType = null;
@@ -109,6 +112,7 @@
     state.zipSourceBytes = null;
     state.zipAllEntries = [];
     state.zipJszip = null;
+    state.zipInlineImageMeta = {};
   }
 
   function resetAllState() {
@@ -432,6 +436,36 @@
       }
     });
 
+    const scriptRe = /<script\b[^>]*\btype=(["'])text\/base64\1[^>]*>([\s\S]*?)<\/script>/gi;
+    let scriptMatch;
+    while ((scriptMatch = scriptRe.exec(htmlText)) !== null) {
+      const fullMatch = scriptMatch[0];
+      const rawContent = scriptMatch[2] || "";
+      const fullBase64 = rawContent.replace(/\s+/g, "");
+      if (!fullBase64) continue;
+
+      const contentIndexInMatch = fullMatch.indexOf(rawContent);
+      const contentStart = scriptMatch.index + contentIndexInMatch;
+      const contentEnd = contentStart + rawContent.length;
+
+      const match = {
+        varName: null,
+        fullBase64: fullBase64,
+        assignStart: contentStart,
+        assignEnd: contentEnd,
+        assignType: "scriptTag",
+        sourceLabel: "script[type=text/base64]"
+      };
+
+      if (!bestMatch || match.fullBase64.length > bestMatch.fullBase64.length) {
+        bestMatch = match;
+      }
+    }
+
+    if (bestMatch && !bestMatch.sourceLabel) {
+      bestMatch.sourceLabel = bestMatch.varName ? ("window." + bestMatch.varName) : "zip";
+    }
+
     return bestMatch;
   }
 
@@ -516,6 +550,33 @@
     const normalized = key.replace(/\\/g, "/");
     const parts = normalized.split("/");
     return parts[parts.length - 1] || normalized;
+  }
+
+  function isZipInlineImageKey(key) {
+    return !!state.zipInlineImageMeta[key];
+  }
+
+  function getZipInlineImageMeta(key) {
+    return state.zipInlineImageMeta[key] || null;
+  }
+
+  function buildZipInlineImageKey(zipPath, index, dataUrl) {
+    const ext = guessExtFromDataUrl(dataUrl) || "png";
+    return zipPath + "/__inline__/inline_" + String(index).padStart(3, "0") + "." + ext;
+  }
+
+  function isZipTextEntry(path) {
+    return /\.(?:js|json|txt|atlas|plist|xml|css|html|htm|fnt|mjs|cjs)$/i.test(path);
+  }
+
+  function parseInlineImageMapFromText(text) {
+    const items = [];
+    const re = /data:image\/(png|jpeg|jpg|webp|gif)[^"')\s]*base64,[A-Za-z0-9+/=]+/gi;
+    let match;
+    while ((match = re.exec(text)) !== null) {
+      items.push(match[0]);
+    }
+    return items;
   }
 
   function stripExtension(filename) {
@@ -657,13 +718,31 @@
     const map = {};
     const allEntries = [];
     const tasks = [];
+    const inlineImageMeta = {};
 
     zip.forEach((relPath, file) => {
       allEntries.push(relPath);
-      if (!/\.(png|jpg|jpeg|webp|gif)$/i.test(relPath)) return;
-      const mime = guessMimeFromPath(relPath);
-      const p = file.async("base64").then((b64) => {
-        map[relPath] = "data:" + mime + ";base64," + b64;
+      if (/\.(png|jpg|jpeg|webp|gif)$/i.test(relPath)) {
+        const mime = guessMimeFromPath(relPath);
+        const p = file.async("base64").then((b64) => {
+          map[relPath] = "data:" + mime + ";base64," + b64;
+        });
+        tasks.push(p);
+        return;
+      }
+      if (!isZipTextEntry(relPath)) return;
+      const p = file.async("string").then((text) => {
+        const inlineImages = parseInlineImageMapFromText(text);
+        inlineImages.forEach((dataUrl, index) => {
+          const key = buildZipInlineImageKey(relPath, index + 1, dataUrl);
+          if (map[key]) return;
+          map[key] = dataUrl;
+          inlineImageMeta[key] = {
+            zipPath: relPath,
+            originalDataUrl: dataUrl,
+            displayName: relPath + " [内嵌图 #" + (index + 1) + "]"
+          };
+        });
       });
       tasks.push(p);
     });
@@ -675,23 +754,49 @@
       zipMeta: {
         zipBase64: base64Zip,
         zipSourceBytes: bytes.slice(0),
-        zipObject: zip
+        zipObject: zip,
+        inlineImageMeta: inlineImageMeta
       }
     };
   }
 
-  async function rebuildSuperHtmlZip(zipObject, overrideMap) {
+  async function rebuildSuperHtmlZip(zipObject, overrideMap, inlineImageMeta) {
     if (!zipObject) {
       throw new Error("缺少 zipObject，无法重打包 superHtmlZip。");
     }
 
     const entries = Object.entries(overrideMap || {});
+    const textEntryReplacements = {};
     entries.forEach(function (entry) {
       const path = entry[0];
       const dataUrl = entry[1];
+      const inlineMeta = inlineImageMeta && inlineImageMeta[path];
+      if (inlineMeta) {
+        if (!textEntryReplacements[inlineMeta.zipPath]) {
+          textEntryReplacements[inlineMeta.zipPath] = [];
+        }
+        textEntryReplacements[inlineMeta.zipPath].push({
+          originalDataUrl: inlineMeta.originalDataUrl,
+          newDataUrl: dataUrl
+        });
+        return;
+      }
       const base64 = (dataUrl.split(",")[1] || "").trim();
       zipObject.file(path, base64, { base64: true });
     });
+
+    const textPaths = Object.keys(textEntryReplacements);
+    for (let i = 0; i < textPaths.length; i++) {
+      const zipPath = textPaths[i];
+      const file = zipObject.file(zipPath);
+      if (!file) continue;
+      let text = await file.async("string");
+      textEntryReplacements[zipPath].forEach(function (item) {
+        if (!item.originalDataUrl || !item.newDataUrl) return;
+        text = text.split(item.originalDataUrl).join(item.newDataUrl);
+      });
+      zipObject.file(zipPath, text);
+    }
 
     const newBytes = await zipObject.generateAsync({
       type: "uint8array",
@@ -773,7 +878,10 @@
       infoDiv.className = "image-info";
 
       let label = key;
-      if (/^data:image\//.test(key)) {
+      if (isZipInlineImageKey(key)) {
+        const inlineMeta = getZipInlineImageMeta(key);
+        label = inlineMeta && inlineMeta.displayName ? inlineMeta.displayName : getFilenameFromResourceKey(key);
+      } else if (/^data:image\//.test(key)) {
         inlineIndex++;
         label = "[内联图 #" + inlineIndex + "]";
       }
@@ -807,7 +915,9 @@
         const dataUrl = state.imageMap[key];
         const ext = guessExtFromDataUrl(dataUrl);
         let baseName;
-        if (/^data:image\//.test(key)) {
+        if (isZipInlineImageKey(key)) {
+          baseName = getFilenameFromResourceKey(key);
+        } else if (/^data:image\//.test(key)) {
           baseName = "inline_" + String(globalIndex).padStart(3, "0");
         } else {
           const parts = key.split("/");
@@ -853,6 +963,7 @@
       if (info) {
         const varName = info.varName;
         state.zipVarName = varName;
+        state.zipSourceLabel = info.sourceLabel || (varName ? ("window." + varName) : "zip");
         state.zipAssignStart = info.assignStart;
         state.zipAssignEnd = info.assignEnd;
         state.zipAssignType = info.assignType;
@@ -867,12 +978,13 @@
           state.zipSourceBytes = zipInfo.zipMeta.zipSourceBytes;
           state.zipJszip = zipInfo.zipMeta.zipObject;
           state.zipAllEntries = zipInfo.allEntries.slice(0);
+          state.zipInlineImageMeta = zipInfo.zipMeta.inlineImageMeta || {};
 
           if (count) {
             state.parseMode = "superHtmlZip";
             state.imageMap = zipInfo.imageMap;
             setParseStatus(
-              "解析完成（superHtmlZip：" + varName + "，" + info.assignType + "），找到 " +
+              "解析完成（superHtmlZip：" + state.zipSourceLabel + "，" + info.assignType + "），找到 " +
               count + " 张图片。"
             );
             renderImageList();
@@ -886,7 +998,7 @@
             state.parseMode = "superHtmlResMap";
             state.imageMap = resInfo.imageMap;
             setParseStatus(
-              "解析完成（superHtmlResMap：" + varName + "），从 window.__res 找到 " +
+              "解析完成（superHtmlResMap：" + state.zipSourceLabel + "），从 window.__res 找到 " +
               resCount + " 张图片。"
             );
           } else {
@@ -1163,10 +1275,12 @@
 
     try {
       // 1) 按不同模式替换图片
-      if (state.parseMode === "superHtmlZip" && state.zipVarName && state.zipAssignStart != null && state.zipAssignEnd != null && state.zipSourceBytes) {
+      if (state.parseMode === "superHtmlZip" && state.zipAssignStart != null && state.zipAssignEnd != null && state.zipSourceBytes) {
         const zip = await JSZip.loadAsync(state.zipSourceBytes.slice(0));
-        const newB64 = await rebuildSuperHtmlZip(zip, state.overrideMap);
-        const newAssign = 'window.' + state.zipVarName + ' = "' + newB64 + '";';
+        const newB64 = await rebuildSuperHtmlZip(zip, state.overrideMap, state.zipInlineImageMeta);
+        const newAssign = state.zipAssignType === "scriptTag"
+          ? newB64
+          : ('window.' + state.zipVarName + ' = "' + newB64 + '";');
 
         newHtml =
           state.baseHtmlText.slice(0, state.zipAssignStart) +
