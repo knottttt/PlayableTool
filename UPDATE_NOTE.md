@@ -1,15 +1,15 @@
-# PlayableTool 4.1.0 更新说明
+# PlayableTool 4.2.0 更新说明
 
 ## 本次重点
 
-- 修复 `script[type="text/base64"]` 形式 super-html 无法正确识别的问题。
-- 新增 zip 内文本文件里的 `data:image` 扫描，补上 `2.js` 等脚本内嵌图场景。
-- 支持将替换后的 zip 内嵌图片回写到原始文本条目，确保生成文件可正常使用。
-- 优化解析状态文案，便于识别当前是 `window.__zip`、`scriptTag` 还是其他入口。
-- 保留现有本地预览、批量替换和 `__zip` 高压缩回写能力。
+- 修复 `window.__adapter_zip__` 被拆成多段 `+=` 时无法完整解析的问题。
+- 新增对同变量后续拼接段的全局收集，避免只读取首段导致 zlib 解压失败。
+- 修复部分 adapterZip playable 明明有完整资源表却提示无法解析的情况。
+- 保持现有 `script[type="text/base64"]`、zip 文本内嵌图识别与回写能力。
+- 保留本地预览、批量替换和 `__zip` 高压缩回写能力。
 
 ## 适用场景
 
-- zip 内图片不是独立文件，而是内嵌在脚本文本中的 playable。
-- 使用 `text/base64` script 标签存放 zip 数据的 super-html 变体。
-- 需要完整提取、替换并回写内嵌图的高频调试流程。
+- `window.__adapter_zip__` 通过多段字符串拼接生成的大体积 playable。
+- adapterZip 资源表被拆散到多个 script 段后，仍需完整提取图片资源。
+- 需要兼容 super-html 与 adapterZip 多种历史变体的高频调试流程。

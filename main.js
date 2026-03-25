@@ -380,6 +380,12 @@
           continue;
         }
 
+        // 只从首个 "=" 开始拼接；单独出现的 "+=" 不视为完整入口
+        if (operator !== "=") {
+          searchIndex = start + token.length;
+          continue;
+        }
+
         cursor = skipWhitespace(htmlText, cursor);
         const literal = consumeJsStringLiteral(htmlText, cursor);
         if (!literal) {
@@ -390,34 +396,30 @@
         const segments = [literal.value];
         const segmentStart = start;
         let segmentEnd = literal.end;
-        let assignType = operator === "=" ? "single" : "concat";
-        let lookahead = literal.end;
+        let assignType = "single";
+        let nextSearchIndex = literal.end;
 
-        while (lookahead < htmlText.length) {
-          lookahead = skipWhitespace(htmlText, lookahead);
-          if (htmlText.charAt(lookahead) === ";") {
-            lookahead += 1;
-          }
-          const nextStart = htmlText.indexOf(token, lookahead);
-          if (nextStart !== lookahead) {
-            break;
-          }
+        while (nextSearchIndex < htmlText.length) {
+          const nextStart = htmlText.indexOf(token, nextSearchIndex);
+          if (nextStart === -1) break;
 
           let nextCursor = skipWhitespace(htmlText, nextStart + token.length);
           if (htmlText.slice(nextCursor, nextCursor + 2) !== "+=") {
-            break;
+            nextSearchIndex = nextStart + token.length;
+            continue;
           }
           nextCursor += 2;
           nextCursor = skipWhitespace(htmlText, nextCursor);
           const nextLiteral = consumeJsStringLiteral(htmlText, nextCursor);
           if (!nextLiteral) {
-            break;
+            nextSearchIndex = nextStart + token.length;
+            continue;
           }
 
           segments.push(nextLiteral.value);
           segmentEnd = nextLiteral.end;
           assignType = "concat";
-          lookahead = nextLiteral.end;
+          nextSearchIndex = nextLiteral.end;
         }
 
         const match = {
