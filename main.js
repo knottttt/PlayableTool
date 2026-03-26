@@ -29,7 +29,8 @@
     buildButton: document.getElementById("buildButton"),
     downloadButton: document.getElementById("downloadButton"),
     buildStatus: document.getElementById("buildStatus"),
-    storeUrlInput: document.getElementById("storeUrlInput"),
+    appleStoreUrlInput: document.getElementById("appleStoreUrlInput"),
+    googlePlayUrlInput: document.getElementById("googlePlayUrlInput"),
     previewFrameWrap: document.getElementById("previewFrameWrap"),
     previewStage: document.getElementById("previewStage"),
     previewFrame: document.getElementById("previewFrame"),
@@ -50,7 +51,8 @@
     buildButton,
     downloadButton,
     buildStatus,
-    storeUrlInput,
+    appleStoreUrlInput,
+    googlePlayUrlInput,
     previewFrameWrap,
     previewStage,
     previewFrame,
@@ -1106,8 +1108,9 @@
   }
 
   // ========== 构造 mraid 跳转脚本 ==========
-  function buildMraidScript(storeUrl) {
-    const safeUrl = storeUrl.replace(/\\/g, "\\\\").replace(/"/g, '\\"');
+  function buildMraidScript(appleStoreUrl, googlePlayUrl) {
+    const safeAppleUrl = (appleStoreUrl || "").replace(/\\/g, "\\\\").replace(/"/g, '\\"');
+    const safeGoogleUrl = (googlePlayUrl || "").replace(/\\/g, "\\\\").replace(/"/g, '\\"');
     const aliases = [
       "download",
       "openStore",
@@ -1121,16 +1124,26 @@
     ];
     const lines = [];
     lines.push("(function(){");
-    lines.push('  const STORE_URL = "' + safeUrl + '";');
+    lines.push('  const APPLE_STORE_URL = "' + safeAppleUrl + '";');
+    lines.push('  const GOOGLE_PLAY_URL = "' + safeGoogleUrl + '";');
+    lines.push("  function getStoreUrl(){");
+    lines.push("    var ua = (navigator.userAgent || '').toLowerCase();");
+    lines.push("    if (/android/.test(ua) && GOOGLE_PLAY_URL) return GOOGLE_PLAY_URL;");
+    lines.push("    if (/(iphone|ipad|ipod|ios)/.test(ua) && APPLE_STORE_URL) return APPLE_STORE_URL;");
+    lines.push("    return APPLE_STORE_URL || GOOGLE_PLAY_URL || '';");
+    lines.push("  }");
     lines.push("  function openStore(){");
     lines.push("    try {");
+    lines.push("      var targetUrl = getStoreUrl();");
+    lines.push("      if (!targetUrl) return;");
     lines.push("      if (window.mraid && typeof mraid.open === 'function') {");
-    lines.push("        mraid.open(STORE_URL);");
+    lines.push("        mraid.open(targetUrl);");
     lines.push("      } else {");
-    lines.push("        window.open(STORE_URL, '_blank');");
+    lines.push("        window.open(targetUrl, '_blank');");
     lines.push("      }");
     lines.push("    } catch (err) {");
-    lines.push("      window.open(STORE_URL, '_blank');");
+    lines.push("      var targetUrl = getStoreUrl();");
+    lines.push("      if (targetUrl) window.open(targetUrl, '_blank');");
     lines.push("    }");
     lines.push("  }");
     lines.push("  window.super_html = window.super_html || {};");
@@ -1150,17 +1163,20 @@
   }
 
   // ========== 直接改 HTML 里原始跳转链接 ==========
-  function rewriteStoreUrlInHtml(html, storeUrl) {
-    if (!storeUrl) return html;
+  function rewriteStoreUrlInHtml(html, appleStoreUrl, googlePlayUrl) {
+    const primaryStoreUrl = appleStoreUrl || googlePlayUrl || "";
+    if (!primaryStoreUrl && !appleStoreUrl && !googlePlayUrl) return html;
     let result = html;
 
     // 1) 先改 mraid.open("xxx") 这种直接调用
-    result = result.replace(
-      /mraid\.open\((["'])(https?:\/\/[^"']+)\1\)/g,
-      function (match, quote, oldUrl) {
-        return 'mraid.open(' + quote + storeUrl + quote + ')';
-      }
-    );
+    if (primaryStoreUrl) {
+      result = result.replace(
+        /mraid\.open\((["'])(https?:\/\/[^"']+)\1\)/g,
+        function (match, quote) {
+          return 'mraid.open(' + quote + primaryStoreUrl + quote + ')';
+        }
+      );
+    }
 
     // 2) 常见变量形式：STORE_URL / storeUrl / clickTag / window.location.href
     const varPatterns = [
@@ -1170,19 +1186,28 @@
       /(window\.location\.href\s*=\s*)(["'])(https?:\/\/[^"']+)\2/g,
     ];
 
-    varPatterns.forEach(function (p) {
-      result = result.replace(p, function (match, prefix, quote, oldUrl) {
-        return prefix + quote + storeUrl + quote;
+    if (primaryStoreUrl) {
+      varPatterns.forEach(function (p) {
+        result = result.replace(p, function (match, prefix, quote) {
+          return prefix + quote + primaryStoreUrl + quote;
+        });
       });
-    });
+    }
 
-    // 3) 兜底：凡是 App Store 链接（itunes.apple.com / apps.apple.com），全部替换成新的
-    const appStoreRe =
-      /https?:\/\/(?:itunes\.apple\.com|apps\.apple\.com)\/[^\s"'<>]+/g;
+    // 3) 兜底：按商店域名分别替换
+    if (appleStoreUrl) {
+      const appleStoreRe = /https?:\/\/(?:itunes\.apple\.com|apps\.apple\.com)\/[^\s"'<>]+/g;
+      result = result.replace(appleStoreRe, function () {
+        return appleStoreUrl;
+      });
+    }
 
-    result = result.replace(appStoreRe, function () {
-      return storeUrl;
-    });
+    if (googlePlayUrl) {
+      const googlePlayRe = /https?:\/\/play\.google\.com\/store\/apps\/[^\s"'<>]+/g;
+      result = result.replace(googlePlayRe, function () {
+        return googlePlayUrl;
+      });
+    }
 
     return result;
   }
@@ -1263,9 +1288,10 @@
       setBuildStatus("请先选择并解析 HTML。");
       return;
     }
-    const storeUrl = storeUrlInput.value.trim();
-    if (!storeUrl) {
-      setBuildStatus("请先填写跳转链接（STORE_URL）。");
+    const appleStoreUrl = appleStoreUrlInput ? appleStoreUrlInput.value.trim() : "";
+    const googlePlayUrl = googlePlayUrlInput ? googlePlayUrlInput.value.trim() : "";
+    if (!appleStoreUrl && !googlePlayUrl) {
+      setBuildStatus("请至少填写一个商店链接（App Store 或 Google Play）。");
       return;
     }
 
@@ -1314,7 +1340,7 @@
       }
 
       // 2) 无论哪种模式，都先在 HTML 里强制改跳转链接
-      newHtml = rewriteStoreUrlInHtml(newHtml, storeUrl);
+      newHtml = rewriteStoreUrlInHtml(newHtml, appleStoreUrl, googlePlayUrl);
 
       // 3) 先清理历史注入块，避免连续调试时重复堆叠
       newHtml = removeOverrideBlocks(newHtml);
@@ -1327,7 +1353,7 @@
       }
 
       // 5) 最后统一注入 mraid 脚本兜底
-      const mraidScript = buildMraidScript(storeUrl);
+      const mraidScript = buildMraidScript(appleStoreUrl, googlePlayUrl);
       newHtml = insertBeforeBodyEnd(newHtml, mraidScript);
 
       // 6) 更新预览与下载状态

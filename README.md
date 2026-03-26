@@ -10,13 +10,13 @@
 
 ## 当前版本
 
-`v4.2.0`
+`v4.3.0`
 
 ## 适用场景
 
 适合以下日常工作：
 - 替换 playable 内的图片素材
-- 快速调整 App Store 跳转链接
+- 快速调整商店跳转链接（App Store / Google Play）
 - 高频调试同一个 HTML playable
 - 批量替换多张图片，减少重复点击上传
 
@@ -28,6 +28,14 @@
 - 自动重写常见跳转链接
 - 自动注入 mraid 兜底逻辑
 - 连续生成时避免注入内容重复叠加
+
+## 4.3.0 更新内容
+
+- 配置区升级为双商店链接输入：`Apple App Store URL` + `Google Play URL`。
+- 新增 Google Play 链接支持：可填写并替换 `play.google.com/store/apps/...` 跳转地址。
+- 跳转替换逻辑升级为分域名重写：Apple 链接只替换 Apple 域名，Google 链接只替换 Google Play 域名。
+- 注入兜底跳转逻辑升级：Android 优先打开 Google Play，iOS 优先打开 App Store。
+- 优化配置区提示文案与输入间距，提升双链接填写体验。
 
 ## 4.2.0 更新内容
 

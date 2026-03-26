@@ -1,5 +1,17 @@
 # Changelog
 
+## 4.3.0 - 2026-03-26
+
+### 版本概览
+本次 4.3.0 重点升级商店链接配置，支持 App Store 与 Google Play 双链接输入，并按平台优先跳转。
+
+### 更新内容
+- 配置区由单一商店链接升级为两行输入：`Apple App Store URL` 与 `Google Play URL`。
+- 新增 Google Play 链接替换支持，覆盖 `play.google.com/store/apps/...` 常见地址。
+- 重构链接重写逻辑为分域名替换：Apple 域名与 Google Play 域名分别替换到对应目标链接。
+- 升级 mraid / window.open 兜底注入逻辑：Android 优先 Google Play，iOS 优先 App Store。
+- 优化双输入框布局，补充上下间距，提升配置可读性与操作效率。
+
 ## 4.2.0 - 2026-03-25
 
 ### 版本概览

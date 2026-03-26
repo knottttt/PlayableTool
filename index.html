@@ -362,6 +362,10 @@
       background: #ffffff;
     }
 
+    .store-url-input + .store-url-input {
+      margin-top: 8px;
+    }
+
     .btn {
       border-radius: var(--radius-md);
       padding: 6px 10px;
@@ -851,7 +855,7 @@
         <div class="sidebar-kv">
           <strong>Step 1.</strong> 上传单文件 H5（.html）<br />
           <strong>Step 2.</strong> 上传后自动解析资源，勾选需要替换的图片<br />
-          <strong>Step 3.</strong> 填写目标 <code>App Store</code> 链接
+          <strong>Step 3.</strong> 填写商店链接（<code>App Store</code> / <code>Google Play</code>）
           <span class="badge-inline">自动覆盖所有原链接</span><br />
           <strong>Step 4.</strong> 生成并预览，确认无误后再下载 HTML
         </div>
@@ -864,7 +868,7 @@
           · 当前支持识别 <strong>window.__zip</strong>、<strong>window.__res</strong>、<strong>__adapter_zip__</strong> 和部分 inline data:image 场景<br />
           · ZIP 内图片替换后会自动重新压缩回写，尽量避免生成文件体积异常变大<br />
           · <code>adapter_zip</code> 模式通过运行时 override 生效；如素材未即时变化，建议重新打开页面验证<br />
-          · 工具会统一重写常见商店链接，包括 <code>itunes.apple.com</code>、<code>apps.apple.com</code>、部分内嵌 ZIP 内链接和 mraid / window.open 兜底逻辑<br />
+          · 工具会统一重写常见商店链接，包括 <code>itunes.apple.com</code>、<code>apps.apple.com</code>、<code>play.google.com/store/apps</code>、部分内嵌 ZIP 内链接和 mraid / window.open 兜底逻辑<br />
           · 生成后支持直接在面板里本地预览；最终仍建议下载 HTML 抽查页面展示、首屏素材、点击跳转和文件体积<br />
           · 使用过程中遇到任何问题，请在飞书找<strong>子薇</strong>协助处理<br />
           </div>
@@ -880,7 +884,7 @@
       <header class="topbar">
         <div class="topbar-title">
           Playable 替换工具面板
-          <span>v4.2.0 · Cocos / ZIP / Inline</span>
+          <span>v4.3.0 · Cocos / ZIP / Inline</span>
         </div>
         <div class="topbar-status">
           <span class="pill">
@@ -919,15 +923,21 @@
               </div>
 
               <div class="config-block">
-                <div class="config-block-title">2. App Store URL</div>
+                <div class="config-block-title">2. 填写商店链接</div>
                 <input
-                  id="storeUrlInput"
-                  class="input-text"
+                  id="appleStoreUrlInput"
+                  class="input-text store-url-input"
                   value="https://apps.apple.com/us/app/hello-jackpot-casino-slots/id6535655150"
-                  placeholder="如：https://apps.apple.com/…hello-jackpot…"
+                  placeholder="Apple App Store URL，如：https://apps.apple.com/..."
+                />
+                <input
+                  id="googlePlayUrlInput"
+                  class="input-text store-url-input"
+                  value=""
+                  placeholder="Google Play URL，如：https://play.google.com/store/apps/details?id=..."
                 />
                 <div class="config-inline-note">
-                  将统一注入 mraid.open / window.open，并替换原有 App Store 链接
+                  支持双链接分别替换；Android 优先 Google Play，iOS 优先 App Store
                 </div>
               </div>
 
